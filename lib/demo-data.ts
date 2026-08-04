@@ -28,10 +28,10 @@ export const tenant = {
   initials: "GA",
   region: "Abitibi-Témiscamingue",
   theme: {
-    primary: "#244c3d",
-    primaryDeep: "#17372d",
-    accent: "#d4ab63",
-    ocliq: "#355764",
+    primary: "#256bff",
+    primaryDeep: "#0b2f73",
+    accent: "#69a7ff",
+    ocliq: "#07152e",
   },
 };
 

@@ -17,7 +17,6 @@ import {
   ChevronRight,
   ChevronsLeft,
   CircleHelp,
-  Columns3,
   ContactRound,
   Eye,
   FileStack,
@@ -82,7 +81,7 @@ const statusOptions: Array<"Toutes" | ComparableStatus> = [
   "Expirée",
 ];
 
-const stepVisuals = [UsersRound, House, Columns3, SlidersHorizontal, BarChart3, Target, Files, ShieldCheck];
+const stepVisuals = [UsersRound, House, Grid2X2, SlidersHorizontal, BarChart3, Target, Files, ShieldCheck];
 
 function ScoreRing({ value }: { value: number }) {
   return (
@@ -302,7 +301,7 @@ function MarketStep() {
     <div className="step-canvas market-layout">
       <section className="editor-card chart-card">
         <div className="section-heading"><div><span className="section-kicker">6 derniers mois</span><h2>Le marché soutient une valeur stable</h2><p>Prix médian des propriétés comparables vendues dans le secteur.</p></div><span className="trend-pill">+6,3 %</span></div>
-        <div className="chart-wrap"><ResponsiveContainer width="100%" height="100%"><AreaChart data={marketTrend} margin={{ top: 18, right: 12, left: -20, bottom: 0 }}><defs><linearGradient id="marketFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#5a8f7b" stopOpacity={0.3}/><stop offset="100%" stopColor="#5a8f7b" stopOpacity={0}/></linearGradient></defs><CartesianGrid vertical={false} stroke="#e7e3da" strokeDasharray="4 4"/><XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: "#77766f", fontSize: 12 }}/><YAxis domain={[350, 410]} axisLine={false} tickLine={false} tick={{ fill: "#77766f", fontSize: 12 }} tickFormatter={(value) => `${value} k$`}/><Tooltip formatter={(value) => [`${value} 000 $`, "Prix médian"]} contentStyle={{ borderRadius: 12, borderColor: "#ded9cf" }}/><Area type="monotone" dataKey="price" stroke="#244c3d" strokeWidth={3} fill="url(#marketFill)" dot={{ r: 4, fill: "#f9f7f2", stroke: "#244c3d", strokeWidth: 2 }}/></AreaChart></ResponsiveContainer></div>
+        <div className="chart-wrap"><ResponsiveContainer width="100%" height="100%"><AreaChart data={marketTrend} margin={{ top: 18, right: 12, left: -20, bottom: 0 }}><defs><linearGradient id="marketFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#256bff" stopOpacity={0.28}/><stop offset="100%" stopColor="#256bff" stopOpacity={0}/></linearGradient></defs><CartesianGrid vertical={false} stroke="#e5eaf2" strokeDasharray="4 4"/><XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: "#667085", fontSize: 12 }}/><YAxis domain={[350, 410]} axisLine={false} tickLine={false} tick={{ fill: "#667085", fontSize: 12 }} tickFormatter={(value) => `${value} k$`}/><Tooltip formatter={(value) => [`${value} 000 $`, "Prix médian"]} contentStyle={{ borderRadius: 12, borderColor: "#d9e1ec" }}/><Area type="monotone" dataKey="price" stroke="#256bff" strokeWidth={3} fill="url(#marketFill)" dot={{ r: 4, fill: "#ffffff", stroke: "#256bff", strokeWidth: 2 }}/></AreaChart></ResponsiveContainer></div>
       </section>
       <aside className="market-stats"><div><span>Prix médian vendu</span><strong>386 000 $</strong><small>5 ventes retenues</small></div><div><span>Délai médian</span><strong>24 jours</strong><small>−5 jours depuis mai</small></div><div><span>Ratio vente / demandé</span><strong>98,7 %</strong><small>Marché équilibré</small></div><div><span>Inventaire actif</span><strong>2,8 mois</strong><small>Offre limitée</small></div></aside>
     </div>
@@ -461,7 +460,11 @@ export default function StudioApp() {
       } as React.CSSProperties}
     >
       <aside className={`sidebar ${mobileOpen ? "mobile-open" : ""}`}>
-        <div className="brand-lockup"><span className="brand-mark"><Columns3 size={20}/></span><div><strong>{frCA.brand.product}</strong><span>{frCA.brand.by}</span></div><button className="collapse-button" onClick={() => setCollapsed(!collapsed)} aria-label="Réduire la navigation"><ChevronsLeft size={17}/></button></div>
+        <div className="brand-lockup">
+          <div className="brand-identity"><img src="/ocliq-logo.png" alt="Ocliq"/><span>{frCA.brand.product}</span></div>
+          <span className="brand-symbol" aria-hidden="true"><img src="/ocliq-logo.png" alt=""/></span>
+          <button className="collapse-button" onClick={() => setCollapsed(!collapsed)} aria-label="Réduire la navigation"><ChevronsLeft size={17}/></button>
+        </div>
         <button className="tenant-switcher"><span className="tenant-avatar">{tenant.initials}</span><span className="tenant-copy"><strong>{tenant.name}</strong><small>{tenant.descriptor}</small></span><ChevronDown size={15}/></button>
         <button className="quick-create" onClick={() => { setActiveNav(1); setActiveStep(0); setMobileOpen(false); flash("Nouvelle analyse démarrée"); }}><Plus size={18}/><span>Créer une ACM</span></button>
         <nav>{frCA.nav.map((item, index) => { const Icon = navIcons[index]; return <button key={item} className={activeNav === index ? "active" : ""} onClick={() => { setActiveNav(index); setMobileOpen(false); if (index !== 1) flash(`${item} — aperçu du module`); }}><Icon size={18}/><span>{item}</span>{index === 5 && <b>3</b>}</button>; })}</nav>

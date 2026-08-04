@@ -5,6 +5,7 @@ ACM Studio est un espace de travail en français canadien pour créer, expliquer
 ## Ce qui est fonctionnel
 
 - navigation responsive et identité de locataire configurable;
+- système visuel Ocliq bleu et encre, avec le logo officiel fourni;
 - parcours ACM en huit étapes avec retour libre entre les étapes;
 - fiche client et propriété sujet;
 - comparables en vue liste, cartes et carte schématique;

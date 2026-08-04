@@ -29,12 +29,13 @@ test("server-renders the French-Canadian ACM workspace", async () => {
 });
 
 test("ships the branded metadata and localized product structure", async () => {
-  const [layout, page, locale, product, packageJson] = await Promise.all([
+  const [layout, page, locale, product, packageJson, demoData] = await Promise.all([
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../lib/fr-ca.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/studio-app.tsx", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
+    readFile(new URL("../lib/demo-data.ts", import.meta.url), "utf8"),
   ]);
 
   assert.match(layout, /locale: "fr_CA"/);
@@ -43,6 +44,9 @@ test("ships the branded metadata and localized product structure", async () => {
   assert.match(locale, /Analyse comparative du marché/);
   assert.match(product, /role="switch"/);
   assert.match(product, /Aucune donnée Centris\/MLS n’est récupérée/);
+  assert.match(product, /\/ocliq-logo\.png/);
+  assert.match(demoData, /primary: "#256bff"/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
   await access(new URL("../public/og.png", import.meta.url));
+  await access(new URL("../public/ocliq-logo.png", import.meta.url));
 });
