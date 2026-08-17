@@ -2,13 +2,21 @@ import { jsPDF } from "jspdf";
 import { initialSubject, propertyMapUrl, propertyStreetViewUrl, type Comparable, type SubjectProperty } from "@/lib/demo-data";
 import type { BrokerBranding } from "@/lib/acm-repository";
 
+/** Broker identity stamped onto the report, including the OACIQ licence. */
+export type ReportBranding = BrokerBranding & {
+  brokerName?: string;
+  licenceNumber?: string;
+  phone?: string;
+  email?: string;
+};
+
 type ReportAssets = {
   logo?: string;
   subjectImage?: string;
   subjectMap?: string;
   subjectStreetView?: string;
   comparableImages?: Record<string, string>;
-  branding?: BrokerBranding & { brokerName?: string };
+  branding?: ReportBranding;
 };
 
 const PAGE_W = 215.9;
@@ -55,6 +63,25 @@ function setText(doc: jsPDF, color: [number, number, number], size: number, weig
   doc.setFontSize(size);
 }
 
+/**
+ * Draws a broker logo scaled to fit inside the box without distortion, detecting
+ * the real image format. Returns false when the image cannot be embedded so the
+ * caller can fall back to the Ocliq mark.
+ */
+function drawLogo(doc: jsPDF, data: string, x: number, y: number, boxW: number, boxH: number) {
+  try {
+    const props = doc.getImageProperties(data);
+    if (!props.width || !props.height) return false;
+    const scale = Math.min(boxW / props.width, boxH / props.height);
+    const width = props.width * scale;
+    const height = props.height * scale;
+    doc.addImage(data, props.fileType, x, y + (boxH - height) / 2, width, height, undefined, "FAST");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function brandMark(doc: jsPDF, x: number, y: number, dark = false) {
   doc.setFillColor(...BLUE);
   doc.roundedRect(x, y, 10, 10, 2.2, 2.2, "F");
@@ -68,13 +95,7 @@ function header(doc: jsPDF, title: string, section: string, logo?: string, custo
   doc.setFillColor(...NAVY);
   doc.rect(0, 0, PAGE_W, 19, "F");
   const headerLogo = customLogo || logo;
-  if (headerLogo) {
-    try {
-      doc.addImage(headerLogo, "PNG", MARGIN, 3.1, 30.6, 13);
-    } catch {
-      brandMark(doc, MARGIN, 4.5, true);
-    }
-  } else {
+  if (!headerLogo || !drawLogo(doc, headerLogo, MARGIN, 3.1, 30.6, 13)) {
     brandMark(doc, MARGIN, 4.5, true);
   }
   setText(doc, [183, 207, 255], 7, "bold");
@@ -141,9 +162,7 @@ function drawCover(doc: jsPDF, included: Comparable[], assets: ReportAssets, sub
 
   const brand = assets.branding;
   const coverLogo = brand?.logoDataUrl || assets.logo;
-  if (coverLogo) {
-    try { doc.addImage(coverLogo, "PNG", MARGIN, 16, 47, 20); } catch { brandMark(doc, MARGIN, 19, true); }
-  } else {
+  if (!coverLogo || !drawLogo(doc, coverLogo, MARGIN, 16, 47, 20)) {
     brandMark(doc, MARGIN, 19, true);
   }
   if (brand?.agencyName) {
@@ -179,13 +198,17 @@ function drawCover(doc: jsPDF, included: Comparable[], assets: ReportAssets, sub
   const brokerName = brand?.brokerName || "Courtier";
   const brokerTitle = brand?.brokerTitle || "Courtier immobilier résidentiel";
   setText(doc, [255, 255, 255], 9, "bold");
-  doc.text(clean(brokerName), PAGE_W - MARGIN, 258, { align: "right" });
+  doc.text(clean(brokerName), PAGE_W - MARGIN, 256, { align: "right" });
   setText(doc, [205, 218, 242], 8.5);
-  doc.text(clean(brokerTitle), PAGE_W - MARGIN, 264, { align: "right" });
-  if (brand?.agencyName) {
-    setText(doc, [205, 218, 242], 7.5);
-    doc.text(clean(brand.agencyName), PAGE_W - MARGIN, 270, { align: "right" });
-  }
+  doc.text(clean(brokerTitle), PAGE_W - MARGIN, 262, { align: "right" });
+  const coverIdentity = [
+    brand?.agencyName ?? "",
+    brand?.licenceNumber ? `Permis OACIQ ${brand.licenceNumber}` : "",
+  ].filter((line): line is string => Boolean(line));
+  setText(doc, [205, 218, 242], 7.5);
+  coverIdentity.forEach((line, index) => {
+    doc.text(clean(line), PAGE_W - MARGIN, 268 + index * 5, { align: "right" });
+  });
 }
 
 function drawSummary(doc: jsPDF, included: Comparable[], assets: ReportAssets, subject: SubjectProperty) {
@@ -309,14 +332,17 @@ function drawValuationMethods(doc: jsPDF, included: Comparable[], assets: Report
   const adjusted = sold.map((item) => item.adjusted).filter(Boolean);
   const meanSale = average(sold.map((item) => item.price));
   const meanPerSqft = average(sold.filter((item) => item.area).map((item) => item.price / item.area));
-  const assessed = sold.filter((item) => item.landAssessment && item.buildingAssessment);
+  const assessed = sold.filter((item) => (item.landAssessment || 0) + (item.buildingAssessment || 0) > 0);
   const assessmentRatios = assessed.map((item) => item.price / ((item.landAssessment || 0) + (item.buildingAssessment || 0)));
   const assessmentIndication = assessmentRatios.length
     ? Math.round(subject.assessment * assessmentRatios.reduce((sum, value) => sum + value, 0) / assessmentRatios.length)
     : 0;
+  // The broker can retain a different average than the computed one; the report
+  // must show the figure actually retained and say so.
+  const overrideMean = subject.soldAverageOverride || 0;
   const methods = [
     ["Médiane ajustée", median(adjusted), "Différences entre propriétés prises en compte"],
-    ["Prix vendu moyen", meanSale, `${sold.length} transactions réalisées`],
+    ["Prix vendu moyen", overrideMean || meanSale, overrideMean ? "Moyenne retenue par le courtier" : `${sold.length} transactions réalisées`],
     ["Prix / pi²", Math.round(meanPerSqft * subject.area), `${cad(meanPerSqft)} × ${number(subject.area)} pi²`],
     ["Ratio d'évaluation", assessmentIndication, `${assessed.length} comparable documenté - couverture limitée`],
   ] as const;
@@ -325,11 +351,15 @@ function drawValuationMethods(doc: jsPDF, included: Comparable[], assets: Report
   setText(doc, INK, 12.5, "bold");
   doc.text("Évaluation municipale du sujet", MARGIN, 78);
   const totalW = PAGE_W - MARGIN * 2;
-  const landW = totalW * subject.landAssessment / subject.assessment;
+  // A blank or unfilled roll would otherwise produce NaN/Infinity bar geometry.
+  const landShare = subject.assessment > 0
+    ? Math.min(Math.max(subject.landAssessment / subject.assessment, 0), 1)
+    : 0;
+  const landW = totalW * landShare;
   doc.setFillColor(109, 167, 255);
-  doc.roundedRect(MARGIN, 88, landW, 13, 3, 3, "F");
+  if (landW > 0) doc.roundedRect(MARGIN, 88, landW, 13, 3, 3, "F");
   doc.setFillColor(...BLUE_DARK);
-  doc.roundedRect(MARGIN + landW, 88, totalW - landW, 13, 3, 3, "F");
+  if (totalW - landW > 0) doc.roundedRect(MARGIN + landW, 88, totalW - landW, 13, 3, 3, "F");
   setText(doc, INK, 8, "bold");
   doc.text(`Terrain ${cad(subject.landAssessment)}`, MARGIN, 110);
   doc.text(`Bâtiment ${cad(subject.buildingAssessment)}`, MARGIN + 64, 110);
@@ -564,6 +594,8 @@ function drawRecommendation(doc: jsPDF, included: Comparable[], assets: ReportAs
   doc.text("Prochaine étape : valider ensemble le scénario qui correspond à votre échéancier.", MARGIN + 6, 255.5);
 }
 
+const SIGNATURE_TOP = 226;
+
 function drawMethod(doc: jsPDF, included: Comparable[], assets: ReportAssets, subject: SubjectProperty) {
   doc.addPage();
   header(doc, "Une conclusion traçable", "08 - Méthodologie", assets.logo, assets.branding?.logoDataUrl);
@@ -588,34 +620,48 @@ function drawMethod(doc: jsPDF, included: Comparable[], assets: ReportAssets, su
   paragraph(doc, documents.join(" - ") || "Sources indiquées dans les fiches comparables.", MARGIN, 203, PAGE_W - MARGIN * 2, 7.4, MUTED, 1.25);
   setText(doc, INK, 10.5, "bold");
   doc.text("Notes du courtier", MARGIN, 220);
-  paragraph(doc, subject.includeBrokerNote === false ? "Note du courtier non incluse à la demande de l'auteur." : (subject.brokerNote?.trim() || "La fourchette recommandée repose principalement sur les ventes ajustées. L'inscription active mesure la concurrence sans être traitée comme une vente réalisée."), MARGIN, 227, PAGE_W - MARGIN * 2, 7.4, MUTED, 1.25);
+  // Kept inside the left column so it cannot run under the signature card.
+  paragraph(doc, subject.includeBrokerNote === false ? "Note du courtier non incluse à la demande de l'auteur." : (subject.brokerNote?.trim() || "La fourchette recommandée repose principalement sur les ventes ajustées. L'inscription active mesure la concurrence sans être traitée comme une vente réalisée."), MARGIN, 227, 118, 7.4, MUTED, 1.25);
   setText(doc, INK, 10.5, "bold");
   doc.text("Avis important", MARGIN, 244);
-  paragraph(doc, "Cette ACM est une opinion de valeur pour la mise en marché. Elle ne constitue pas une évaluation agréée, une garantie de prix ou un avis juridique.", MARGIN, 251, 130, 7.1, MUTED, 1.2);
+  paragraph(doc, "Cette ACM est une opinion de valeur pour la mise en marché. Elle ne constitue pas une évaluation agréée, une garantie de prix ou un avis juridique.", MARGIN, 251, 118, 7.1, MUTED, 1.2);
 
-  const sigLogo = assets.branding?.logoDataUrl || assets.logo;
-  if (sigLogo) {
-    try {
-      doc.setFillColor(...NAVY);
-      doc.roundedRect(155, 245, 37, 18, 2.5, 2.5, "F");
-      doc.addImage(sigLogo, "PNG", 158, 247, 31, 14);
-    } catch {
-      // Leave the signature area clean when the full logo cannot be embedded.
-    }
+  // A Quebec ACM must clearly identify its author and the agency it is attached
+  // to, both OACIQ permit holders. The logo is omitted: it is in the page header.
+  const brand = assets.branding;
+  const sigX = 140;
+  const sigW = PAGE_W - MARGIN - sigX;
+  const textW = sigW - 10;
+  doc.setFillColor(...BLUE_PALE);
+  doc.roundedRect(sigX, SIGNATURE_TOP, sigW, 40, 3, 3, "F");
+  setText(doc, BLUE_DARK, 6, "bold");
+  doc.text("PRÉPARÉE PAR", sigX + 5, SIGNATURE_TOP + 5);
+
+  const identity: Array<{ text: string; strong?: boolean; gap?: boolean }> = [];
+  if (brand?.brokerName) identity.push({ text: brand.brokerName, strong: true });
+  if (brand?.brokerTitle) identity.push({ text: brand.brokerTitle });
+  if (brand?.licenceNumber) identity.push({ text: `Permis OACIQ ${brand.licenceNumber}` });
+  const brokerContact = [brand?.phone, brand?.email].filter(Boolean).join(" · ");
+  if (brokerContact) identity.push({ text: brokerContact });
+  if (brand?.agencyName) {
+    identity.push({ text: brand.agencyLicence ? `${brand.agencyName} - Permis ${brand.agencyLicence}` : brand.agencyName, gap: true });
   }
-  const sigName = assets.branding?.brokerName || "";
-  const sigTitle = assets.branding?.brokerTitle || "";
-  const sigAgency = assets.branding?.agencyName || "";
-  if (sigName || sigTitle || sigAgency) {
-    setText(doc, INK, 7.5, "bold");
-    doc.text(clean(sigName), 173.5, 266, { align: "center" });
-    setText(doc, MUTED, 6.5);
-    if (sigTitle) doc.text(clean(sigTitle), 173.5, 270, { align: "center" });
-    if (sigAgency) doc.text(clean(sigAgency), 173.5, 274, { align: "center" });
-  } else {
-    setText(doc, MUTED, 6.8);
-    doc.text("ACM Studio par Ocliq", 173.5, 266, { align: "center" });
-  }
+  if (brand?.agencyAddress) identity.push({ text: brand.agencyAddress });
+  const agencyContact = [brand?.agencyPhone, brand?.agencyWebsite].filter(Boolean).join(" · ");
+  if (agencyContact) identity.push({ text: agencyContact });
+  if (!identity.length) identity.push({ text: "ACM Studio par Ocliq" });
+
+  let cursor = SIGNATURE_TOP + 10;
+  const limit = SIGNATURE_TOP + 37;
+  identity.forEach(({ text, strong, gap }) => {
+    if (gap) cursor += 1.6;
+    if (cursor > limit) return;
+    setText(doc, strong ? INK : MUTED, strong ? 7.4 : 6.3, strong ? "bold" : "normal");
+    // Long values are clipped to one line so they cannot spill out of the card.
+    const [line] = doc.splitTextToSize(clean(text), textW) as string[];
+    doc.text(line, sigX + 5, cursor);
+    cursor += strong ? 4.4 : 3.4;
+  });
 }
 
 function drawAnnexes(doc: jsPDF, assets: ReportAssets, subject: SubjectProperty) {
@@ -691,7 +737,7 @@ async function loadImage(url: string) {
   }
 }
 
-async function createAcmPdf(comparables: Comparable[], subject: SubjectProperty = initialSubject, branding?: BrokerBranding & { brokerName?: string }) {
+async function createAcmPdf(comparables: Comparable[], subject: SubjectProperty = initialSubject, branding?: ReportBranding) {
   const included = comparables.filter((item) => item.included).slice(0, 7);
   const hasCoordinates = typeof subject.latitude === "number" && typeof subject.longitude === "number";
   const subjectPhoto = hasCoordinates
@@ -713,13 +759,13 @@ async function createAcmPdf(comparables: Comparable[], subject: SubjectProperty 
   return buildAcmPdf(comparables, { logo, subjectImage, subjectMap, subjectStreetView, comparableImages, branding }, subject);
 }
 
-export async function generateAcmPdf(comparables: Comparable[], subject: SubjectProperty = initialSubject, branding?: BrokerBranding & { brokerName?: string }) {
+export async function generateAcmPdf(comparables: Comparable[], subject: SubjectProperty = initialSubject, branding?: ReportBranding) {
   const doc = await createAcmPdf(comparables, subject, branding);
   const slug = branding?.agencyName || "Ocliq";
   doc.save(`ACM-${slug}-${subject.address || "nouvelle-analyse"}.pdf`);
 }
 
-export async function createAcmPdfPreviewUrl(comparables: Comparable[], subject: SubjectProperty = initialSubject, branding?: BrokerBranding & { brokerName?: string }) {
+export async function createAcmPdfPreviewUrl(comparables: Comparable[], subject: SubjectProperty = initialSubject, branding?: ReportBranding) {
   const doc = await createAcmPdf(comparables, subject, branding);
   return URL.createObjectURL(doc.output("blob"));
 }

@@ -14,7 +14,7 @@ export const frCA = {
   },
   nav: [
     "Analyses",
-    "Modèles de rapport",
+    "Identité du courtier",
     "Paramètres",
   ],
   steps: [

@@ -1,4 +1,5 @@
 import type { Comparable, SubjectProperty } from "@/lib/demo-data";
+import { LAST_STEP } from "@/lib/quebec-acm";
 import { createClient } from "@/utils/supabase/client";
 
 export type SavedWorkspace = { reportId: string; workflowStep: number; comparables: Comparable[]; subject?: SubjectProperty };
@@ -68,7 +69,7 @@ export async function loadWorkspace(reportId: string): Promise<SavedWorkspace> {
 
 export async function markReportReady(reportId: string) {
   const { supabase } = await requireUser();
-  const { error } = await supabase.from("acm_reports").update({ status: "ready", workflow_step: 5 }).eq("id", reportId);
+  const { error } = await supabase.from("acm_reports").update({ status: "ready", workflow_step: LAST_STEP }).eq("id", reportId);
   if (error) throw error;
 }
 
@@ -76,49 +77,6 @@ export async function archiveReport(reportId: string) {
   const { supabase } = await requireUser();
   const { error } = await supabase.from("acm_reports").update({ status: "archived" }).eq("id", reportId);
   if (error) throw error;
-}
-
-export async function loadOrCreateWorkspace(seed: Comparable[]): Promise<SavedWorkspace> {
-  const supabase = createClient();
-  const { data: { user }, error: userError } = await supabase.auth.getUser();
-  if (userError || !user) throw userError ?? new Error("Session requise");
-
-  const { data: existing, error: reportError } = await supabase
-    .from("acm_reports")
-    .select("id, workflow_step")
-    .eq("owner_id", user.id)
-    .neq("status", "archived")
-    .order("updated_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (reportError) throw reportError;
-
-  let report = existing;
-  if (!report) {
-    const created = await supabase.from("acm_reports").insert({
-      owner_id: user.id,
-      title: "ACM - 218, rue des Pins",
-      subject_address: "218, rue des Pins",
-      subject_city: "Rouyn-Noranda",
-      subject_postal_code: "J9X 5M2",
-      workflow_step: 1,
-    }).select("id, workflow_step").single();
-    if (created.error) throw created.error;
-    report = created.data;
-    await saveWorkspace(report.id, report.workflow_step, seed);
-  }
-
-  const { data: rows, error: comparableError } = await supabase
-    .from("comparables")
-    .select("data")
-    .eq("report_id", report.id)
-    .order("sort_order");
-  if (comparableError) throw comparableError;
-  return {
-    reportId: report.id,
-    workflowStep: report.workflow_step,
-    comparables: rows?.length ? rows.map((row) => row.data as Comparable) : seed,
-  };
 }
 
 export async function saveWorkspace(reportId: string, workflowStep: number, comparables: Comparable[], subject?: SubjectProperty) {
@@ -148,6 +106,16 @@ export async function saveWorkspace(reportId: string, workflowStep: number, comp
   }));
   const saved = await supabase.from("comparables").upsert(rows, { onConflict: "id" });
   if (saved.error) throw saved.error;
+  // Upsert alone leaves behind rows the broker removed during this session, and
+  // they would reappear on the next load. Prune whatever is no longer present.
+  const existing = await supabase.from("comparables").select("id").eq("report_id", reportId);
+  if (existing.error) throw existing.error;
+  const keep = new Set(rows.map((row) => row.id));
+  const stale = (existing.data ?? []).map((row) => row.id).filter((id) => !keep.has(id));
+  if (stale.length) {
+    const pruned = await supabase.from("comparables").delete().eq("report_id", reportId).in("id", stale);
+    if (pruned.error) throw pruned.error;
+  }
 }
 
 export async function signOut() {
@@ -163,15 +131,23 @@ export async function signOut() {
 export type BrokerBranding = {
   brokerTitle: string;
   slogan: string;
-  agencyName: string;
   logoDataUrl: string;
+  agencyName: string;
+  agencyLicence: string;
+  agencyAddress: string;
+  agencyPhone: string;
+  agencyWebsite: string;
 };
 
 export const defaultBranding: BrokerBranding = {
   brokerTitle: "Courtier immobilier résidentiel",
   slogan: "La valeur expliquée avec clarté.",
-  agencyName: "",
   logoDataUrl: "",
+  agencyName: "",
+  agencyLicence: "",
+  agencyAddress: "",
+  agencyPhone: "",
+  agencyWebsite: "",
 };
 
 export type BrokerProfile = {
@@ -179,20 +155,41 @@ export type BrokerProfile = {
   brokerage_name: string;
   phone: string;
   email: string;
-  branding?: BrokerBranding;
+  licence_number: string;
+  branding: BrokerBranding;
 };
+
+/** Keeps partial rows from older installations usable without undefined fields. */
+export function normalizeBranding(value: unknown): BrokerBranding {
+  const raw = (value ?? {}) as Partial<BrokerBranding>;
+  return {
+    brokerTitle: raw.brokerTitle ?? defaultBranding.brokerTitle,
+    slogan: raw.slogan ?? defaultBranding.slogan,
+    logoDataUrl: raw.logoDataUrl ?? defaultBranding.logoDataUrl,
+    agencyName: raw.agencyName ?? defaultBranding.agencyName,
+    agencyLicence: raw.agencyLicence ?? defaultBranding.agencyLicence,
+    agencyAddress: raw.agencyAddress ?? defaultBranding.agencyAddress,
+    agencyPhone: raw.agencyPhone ?? defaultBranding.agencyPhone,
+    agencyWebsite: raw.agencyWebsite ?? defaultBranding.agencyWebsite,
+  };
+}
 
 export async function loadProfile(): Promise<BrokerProfile> {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Session requise");
-  const { data, error } = await supabase.from("profiles").select("full_name, brokerage_name, phone, email").eq("id", user.id).maybeSingle();
+  const { data, error } = await supabase.from("profiles")
+    .select("full_name, brokerage_name, phone, email, licence_number, branding")
+    .eq("id", user.id)
+    .maybeSingle();
   if (error) throw error;
   return {
     full_name: data?.full_name || user.user_metadata.full_name || "",
     brokerage_name: data?.brokerage_name || "",
     phone: data?.phone || "",
     email: data?.email || user.email || "",
+    licence_number: data?.licence_number || "",
+    branding: normalizeBranding(data?.branding),
   };
 }
 
@@ -200,6 +197,16 @@ export async function saveProfile(profile: BrokerProfile) {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Session requise");
-  const { error } = await supabase.from("profiles").upsert({ id: user.id, ...profile }, { onConflict: "id" });
+  // Columns are listed explicitly: spreading the profile would send any future
+  // client-only field to PostgREST and fail the whole upsert.
+  const { error } = await supabase.from("profiles").upsert({
+    id: user.id,
+    full_name: profile.full_name,
+    brokerage_name: profile.brokerage_name,
+    phone: profile.phone,
+    email: profile.email,
+    licence_number: profile.licence_number,
+    branding: normalizeBranding(profile.branding),
+  }, { onConflict: "id" });
   if (error) throw error;
 }

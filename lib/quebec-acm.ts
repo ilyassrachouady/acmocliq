@@ -1,3 +1,15 @@
+/** Workflow indices; the order must match frCA.steps. */
+export const WORKFLOW = {
+  subject: 0,
+  active: 1,
+  sold: 2,
+  annexes: 3,
+  report: 4,
+} as const;
+
+export const STEP_COUNT = 5;
+export const LAST_STEP = WORKFLOW.report;
+
 export const PROPERTY_TYPES = [
   "Maison unifamiliale isolée",
   "Maison de plain-pied",

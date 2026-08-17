@@ -9,9 +9,15 @@ create table if not exists public.profiles (
   full_name text,
   brokerage_name text,
   phone text,
+  licence_number text,
+  branding jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- Existing installations: add the report identity columns without touching data.
+alter table public.profiles add column if not exists licence_number text;
+alter table public.profiles add column if not exists branding jsonb not null default '{}'::jsonb;
 
 create table if not exists public.acm_reports (
   id uuid primary key default gen_random_uuid(),
