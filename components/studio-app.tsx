@@ -4,7 +4,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { archiveReport, createWorkspace, listReports, loadProfile, loadWorkspace, markReportReady, saveProfile, saveWorkspace, signOut, type AcmReportSummary, type BrokerProfile } from "@/lib/acm-repository";
+import { archiveReport, createWorkspace, defaultBranding, listReports, loadProfile, loadWorkspace, markReportReady, saveProfile, saveWorkspace, signOut, type AcmReportSummary, type BrokerBranding, type BrokerProfile } from "@/lib/acm-repository";
 import {
   ArrowLeft,
   ArrowRight,
@@ -56,17 +56,10 @@ import {
   UsersRound,
   X,
 } from "lucide-react";
-import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 import { frCA } from "@/lib/fr-ca";
 import { prefetchPropertyMedia } from "@/lib/prefetch-media";
+import { AcmSubjectEditor, AnnexesPanel } from "@/components/acm-workspace";
+import { parseAddressParts } from "@/lib/quebec-acm";
 import {
   Comparable,
   ComparableSource,
@@ -75,7 +68,6 @@ import {
   formatSignedCAD,
   initialComparables,
   initialSubject,
-  marketTrend,
   propertyStreetViewUrl,
   propertyMapUrl,
   tenant,
@@ -96,9 +88,19 @@ const statusOptions: Array<"Toutes" | ComparableStatus> = [
   "Retirée",
 ];
 
-const stepVisuals = [House, Grid2X2, SlidersHorizontal, Target, Files, ShieldCheck];
+const stepVisuals = [House, Building2, BadgeDollarSign, Files, FileCheck2];
 
-const blankSubject: SubjectProperty = { ...initialSubject, address: "", city: "", postalCode: "", owners: "", phone: "", email: "", context: "", year: 0, beds: 0, baths: 0, area: 0, assessment: 0, latitude: undefined, longitude: undefined, image: undefined };
+const blankSubject: SubjectProperty = {
+  ...initialSubject,
+  address: "", city: "", postalCode: "", owners: "", phone: "", email: "", context: "",
+  year: 0, beds: 0, baths: 0, area: 0, assessment: 0, landAssessment: 0, buildingAssessment: 0,
+  strengths: "", considerations: "",
+  latitude: undefined, longitude: undefined, image: undefined,
+  civicNumber: "", unit: "", street: "", province: "Québec",
+  introduction: "", brokerNote: "", annexes: [],
+  lotArea: 0, parkingCount: 0, garageCount: 0, rooms: 0, powderRooms: 0, levels: 0,
+  priceOffensive: 0, priceRealistic: 0, priceOptimistic: 0, soldAverageOverride: 0,
+};
 
 type ResolvedAddress = {
   text: string;
@@ -530,95 +532,6 @@ function InsightPanel({ comparables, onContinue }: { comparables: Comparable[]; 
   );
 }
 
-function DossierStep({ subject, onChange }: { subject: SubjectProperty; onChange: (subject: SubjectProperty) => void }) {
-  const [editing, setEditing] = useState(!subject.address);
-  const [draft, setDraft] = useState(subject);
-  const update = (key: keyof SubjectProperty, value: string | number | undefined) => setDraft((current) => ({ ...current, [key]: value }));
-  if (editing) return <div className="step-canvas dossier-editor-layout"><section className="editor-card dossier-editor"><div className="section-heading"><div><span className="section-kicker">RENSEIGNEMENTS ESSENTIELS</span><h2>Créer le dossier sujet</h2><p>Commencez par l’adresse, puis complétez seulement ce qui influence le rapport.</p></div></div><div className="settings-fields dossier-fields"><label className="span-2"><span>Adresse complète *</span><AddressAutocomplete defaultValue={draft.address} onResolved={(location) => setDraft((current) => ({ ...current, address: location.text, city: location.city ?? current.city, postalCode: location.postalCode ?? current.postalCode, latitude: location.latitude, longitude: location.longitude, image: typeof location.latitude === "number" && typeof location.longitude === "number" ? propertyStreetViewUrl(location.latitude, location.longitude) : current.image }))}/></label><label><span>Municipalité *</span><input value={draft.city} onChange={(e) => update("city", e.target.value)}/></label><label><span>Code postal</span><input value={draft.postalCode} onChange={(e) => update("postalCode", e.target.value)}/></label><label className="span-2"><span>Propriétaire(s) *</span><input value={draft.owners} onChange={(e) => update("owners", e.target.value)} placeholder="Nom du ou des vendeurs"/></label><label><span>Téléphone</span><input value={draft.phone} onChange={(e) => update("phone", e.target.value)}/></label><label><span>Courriel</span><input value={draft.email} onChange={(e) => update("email", e.target.value)}/></label><label><span>Type de propriété</span><select value={draft.type} onChange={(e) => update("type", e.target.value)}><option>Maison de plain-pied</option><option>Maison à étages</option><option>Condo</option><option>Duplex</option><option>Immeuble à revenus</option></select></label><label><span>Année</span><input inputMode="numeric" value={draft.year || ""} onChange={(e) => update("year", Number(e.target.value))}/></label><label><span>Chambres</span><input inputMode="numeric" value={draft.beds || ""} onChange={(e) => update("beds", Number(e.target.value))}/></label><label><span>Salles de bain</span><input inputMode="numeric" value={draft.baths || ""} onChange={(e) => update("baths", Number(e.target.value))}/></label><label><span>Superficie habitable (pi²)</span><input inputMode="numeric" value={draft.area || ""} onChange={(e) => update("area", Number(e.target.value))}/></label><label><span>Évaluation municipale</span><input inputMode="numeric" value={draft.assessment ? draft.assessment / 100 : ""} onChange={(e) => update("assessment", Number(e.target.value) * 100)}/></label><label className="span-2"><span>Contexte du vendeur</span><textarea value={draft.context} onChange={(e) => update("context", e.target.value)}/></label></div><div className="dossier-editor-actions">{subject.address && <button className="secondary-action" onClick={() => setEditing(false)}>Annuler</button>}<button className="primary-action" disabled={!draft.address || !draft.city || !draft.owners} onClick={() => { onChange(draft); setEditing(false); }}><Check/> Enregistrer le dossier</button></div></section></div>;
-  return (
-    <div className="step-canvas dossier-overview">
-      <section className="editor-card compact-dossier-card">
-        <div className="section-heading"><div><span className="section-kicker">Point de départ</span><h2>Le dossier en un coup d’œil</h2><p>Le client et la propriété sujet sont regroupés au même endroit.</p></div><button className="secondary-action" onClick={() => { setDraft(subject); setEditing(true); }}><SquarePen size={16}/> Modifier</button></div>
-        <div className="dossier-summary-grid">
-          <article><span className="summary-icon"><UsersRound/></span><div><small>Propriétaires</small><h3>{subject.owners}</h3><p>{subject.phone} · {subject.email}</p></div><CheckCircle2/></article>
-          <article><span className="summary-icon"><House/></span><div><small>Propriété sujet</small><h3>{subject.address}</h3><p>{subject.city} · {subject.type} · {subject.beds} ch.</p></div><CheckCircle2/></article>
-        </div>
-        <div className="dossier-facts"><span><b>{subject.area.toLocaleString("fr-CA")}</b> pi² habitables</span><span><b>{subject.year}</b> construction</span><span><b>{formatCAD(subject.assessment)}</b> évaluation municipale</span><span><b>{subject.timeframe}</b> échéancier souhaité</span></div>
-        <label className="dossier-note"><span>Contexte du vendeur</span><textarea value={subject.context} onChange={(e) => onChange({ ...subject, context: e.target.value })}/></label>
-      </section>
-      <aside className="context-card dossier-check"><CheckCircle2/><h3>Prêt pour les comparables</h3><p>Les renseignements essentiels du sujet sont complets. Vous pourrez les modifier en tout temps.</p><span><ShieldCheck size={15}/> Notes privées par défaut</span></aside>
-    </div>
-  );
-}
-
-function AdjustmentsStep({ comparables }: { comparables: Comparable[] }) {
-  const selected = comparables.filter((item) => item.included).slice(0, 4);
-  const [detailOpen, setDetailOpen] = useState(false);
-  const rows = [
-    ["Superficie habitable", "+3 500 $", "+7 000 $", "−4 000 $", "+4 500 $"],
-    ["État et rénovations", "0 $", "+5 000 $", "−6 000 $", "+3 500 $"],
-    ["Salle de bain", "0 $", "0 $", "0 $", "+7 500 $"],
-    ["Terrain et localisation", "+1 500 $", "−3 000 $", "+3 000 $", "−1 000 $"],
-  ];
-  return (
-    <div className="step-canvas adjustment-layout">
-      <section className="editor-card matrix-card">
-        <div className="section-heading"><div><span className="section-kicker">Jugement du courtier</span><h2>Matrice d’ajustements</h2><p>Les principaux facteurs sont regroupés pour une lecture rapide et cohérente.</p></div></div>
-        <div className="matrix-scroll"><table className="matrix-table"><thead><tr><th>Facteur</th>{selected.map((item) => <th key={item.id}>{item.address.split(",")[0]}</th>)}</tr></thead><tbody>{rows.map((row) => <tr key={row[0]}>{row.map((cell, index) => <td key={`${row[0]}-${index}`}><span className={index > 0 && cell.startsWith("+") ? "matrix-positive" : index > 0 && cell.startsWith("−") ? "matrix-negative" : ""}>{cell}</span></td>)}</tr>)}</tbody><tfoot><tr><td>Ajustement total</td>{selected.map((item) => <td key={item.id}>{formatSignedCAD(item.adjustment)}</td>)}</tr></tfoot></table></div>
-      </section>
-      <aside className="context-card adjustment-context"><Sparkles /><span className="ai-label">Suggestion assistée</span><h3>Un écart mérite votre attention</h3><p>L’ajustement de 12 000 $ au 128, chemin Trémoy représente 2,9 % du prix demandé. Ajoutez une justification avant de valider.</p><button className="text-action" onClick={() => setDetailOpen((open) => !open)}>{detailOpen ? "Masquer le détail" : "Voir le détail"} <ChevronDown className={detailOpen ? "rotate" : ""} size={15}/></button>{detailOpen && <div className="adjustment-detail"><strong>Pourquoi le signal?</strong><p>La propriété est active, plus éloignée et son ajustement dépasse la médiane de l’échantillon. Confirmez la condition et la localisation avant publication.</p></div>}<small>L’assistant ne modifie jamais les montants.</small></aside>
-    </div>
-  );
-}
-
-function MarketStep() {
-  return (
-    <div className="step-canvas market-layout">
-      <section className="editor-card chart-card">
-        <div className="section-heading"><div><span className="section-kicker">6 derniers mois</span><h2>Le marché soutient une valeur stable</h2><p>Prix médian des propriétés comparables vendues dans le secteur.</p></div><span className="trend-pill">+6,3 %</span></div>
-        <div className="chart-wrap"><ResponsiveContainer width="100%" height="100%"><AreaChart data={marketTrend} margin={{ top: 18, right: 12, left: -20, bottom: 0 }}><defs><linearGradient id="marketFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#256bff" stopOpacity={0.28}/><stop offset="100%" stopColor="#256bff" stopOpacity={0}/></linearGradient></defs><CartesianGrid vertical={false} stroke="#e5eaf2" strokeDasharray="4 4"/><XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: "#667085", fontSize: 12 }}/><YAxis domain={[350, 410]} axisLine={false} tickLine={false} tick={{ fill: "#667085", fontSize: 12 }} tickFormatter={(value) => `${value} k$`}/><Tooltip formatter={(value) => [`${value} 000 $`, "Prix médian"]} contentStyle={{ borderRadius: 12, borderColor: "#d9e1ec" }}/><Area type="monotone" dataKey="price" stroke="#256bff" strokeWidth={3} fill="url(#marketFill)" dot={{ r: 4, fill: "#ffffff", stroke: "#256bff", strokeWidth: 2 }}/></AreaChart></ResponsiveContainer></div>
-      </section>
-      <aside className="market-stats"><div><span>Prix médian vendu</span><strong>386 000 $</strong><small>5 ventes retenues</small></div><div><span>Délai médian</span><strong>24 jours</strong><small>−5 jours depuis mai</small></div><div><span>Ratio vente / demandé</span><strong>98,7 %</strong><small>Marché équilibré</small></div><div><span>Inventaire actif</span><strong>2,8 mois</strong><small>Offre limitée</small></div></aside>
-    </div>
-  );
-}
-
-function StrategyStep() {
-  const [selectedScenario, setSelectedScenario] = useState("Positionnement recommandé");
-  const scenarios = [
-    { name: "Vente accélérée", range: "374 000 $ – 382 000 $", launch: "379 000 $", note: "Maximise l’attention dès les premiers jours.", tone: "fast" },
-    { name: "Positionnement recommandé", range: "385 000 $ – 397 000 $", launch: "394 000 $", note: "Le meilleur équilibre entre valeur et réponse du marché.", tone: "recommended" },
-    { name: "Positionnement ambitieux", range: "399 000 $ – 412 000 $", launch: "409 000 $", note: "Teste le haut du marché avec un délai potentiellement plus long.", tone: "bold" },
-  ];
-  return (
-    <div className="step-canvas strategy-step">
-      <div className="strategy-intro"><span className="section-kicker">Recommandation professionnelle</span><h2>Trois façons de se positionner</h2><p>Présentez des options claires, avec leurs avantages et compromis. Aucun scénario ne garantit un prix ni un délai de vente.</p></div>
-      <div className="scenario-grid">{scenarios.map((scenario) => { const selected = selectedScenario === scenario.name; return <article key={scenario.name} className={`scenario-card ${scenario.tone} ${selected ? "selected" : ""}`}><span className="scenario-label">{scenario.name}</span><h3>{scenario.range}</h3><div><span>Prix de lancement suggéré</span><strong>{scenario.launch}</strong></div><p>{scenario.note}</p><button onClick={() => setSelectedScenario(scenario.name)} className={selected ? "primary-action full" : "secondary-action full"}>{selected ? "Scénario retenu" : "Choisir ce scénario"}{selected && <Check size={16}/>}</button></article>; })}</div>
-    </div>
-  );
-}
-
-function PresentationStep({ onPreview }: { onPreview: () => void }) {
-  const [sections, setSections] = useState([
-    { name: "Couverture", included: true },
-    { name: "Message de votre courtier", included: true },
-    { name: "Votre propriété", included: true },
-    { name: "Aperçu du marché", included: true },
-    { name: "Propriétés comparables", included: true },
-    { name: "Stratégie recommandée", included: true },
-    { name: "Plan de mise en marché", included: true },
-    { name: "À propos du courtier", included: true },
-    { name: "Prochaines étapes", included: true },
-  ]);
-  const visibleCount = sections.filter((section) => section.included).length;
-  return (
-    <div className="step-canvas presentation-layout">
-      <section className="editor-card"><div className="section-heading"><div><span className="section-kicker">{visibleCount} sections visibles</span><h2>Construire le récit de la présentation</h2><p>Activez ou masquez les blocs du rapport avant de générer l’aperçu client.</p></div><button className="secondary-action" onClick={onPreview}><Eye size={16}/> Aperçu PDF</button></div><div className="section-list">{sections.map((section, index) => <button type="button" className={`section-row ${section.included ? "" : "section-row-off"}`} key={section.name} onClick={() => setSections((items) => items.map((item) => item.name === section.name ? { ...item, included: !item.included } : item))}><b>{index + 1}</b><strong>{section.name}</strong><span className="visible-pill">{section.included ? <><Check size={14}/> Incluse</> : "Masquée"}</span></button>)}</div></section>
-      <aside className="context-card presentation-context"><Eye/><h3>Une expérience pensée pour le vendeur</h3><p>Le rapport s’adapte au téléphone, à la tablette et à l’impression. Les notes privées ne sont jamais incluses.</p><div className="device-preview"><span/><span/><span/></div></aside>
-    </div>
-  );
-}
-
 function ShareStep({ subject, onPreview, onDownload, pdfGenerating, onNotify }: { subject: SubjectProperty; onPreview: () => void; onDownload: () => void; pdfGenerating: boolean; onNotify: (message: string) => void }) {
   const [copied, setCopied] = useState(false);
   const [checks, setChecks] = useState([
@@ -653,11 +566,9 @@ function ShareStep({ subject, onPreview, onDownload, pdfGenerating, onNotify }: 
   );
 }
 
-function StepContent({ step, comparables, subject, onSubjectChange, onPreview, onDownload, pdfGenerating, onNotify }: { step: number; comparables: Comparable[]; subject: SubjectProperty; onSubjectChange: (subject: SubjectProperty) => void; onPreview: () => void; onDownload: () => void; pdfGenerating: boolean; onNotify: (message: string) => void }) {
-  if (step === 0) return <DossierStep subject={subject} onChange={onSubjectChange}/>;
-  if (step === 2) return <AdjustmentsStep comparables={comparables} />;
-  if (step === 3) return <StrategyStep />;
-  if (step === 4) return <PresentationStep onPreview={onPreview}/>;
+function StepContent({ step, subject, onSubjectChange, onPreview, onDownload, pdfGenerating, onNotify, soldAverage, addressField }: { step: number; subject: SubjectProperty; onSubjectChange: (subject: SubjectProperty) => void; onPreview: () => void; onDownload: () => void; pdfGenerating: boolean; onNotify: (message: string) => void; soldAverage: number; addressField: ReactNode }) {
+  if (step === 0) return <AcmSubjectEditor subject={subject} onChange={onSubjectChange} addressField={addressField} soldAverage={soldAverage} onNotify={onNotify}/>;
+  if (step === 3) return <AnnexesPanel subject={subject} onChange={onSubjectChange}/>;
   return <ShareStep subject={subject} onPreview={onPreview} onDownload={onDownload} pdfGenerating={pdfGenerating} onNotify={onNotify} />;
 }
 
@@ -913,7 +824,9 @@ function SettingsPage({
   demoMode?: boolean;
 }) {
   const [saving, setSaving] = useState(false);
+  const branding = profile.branding ?? { ...defaultBranding };
   const update = (key: keyof BrokerProfile, value: string) => onProfileChange({ ...profile, [key]: value });
+  const updateBranding = (key: keyof BrokerBranding, value: string) => onProfileChange({ ...profile, branding: { ...branding, [key]: value } });
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setSaving(true);
@@ -954,8 +867,45 @@ function SettingsPage({
             <button className="primary-action settings-save" disabled={saving}>{saving ? <LoaderCircle className="pdf-spinner"/> : <Save/>}{saving ? "Enregistrement…" : "Enregistrer le profil"}</button>
           </section>
           <section id="branding" className="settings-card">
-            <div className="settings-card-title"><span><Palette/></span><div><h2>Identité des rapports</h2><p>Le thème Ocliq est appliqué automatiquement à chaque ACM.</p></div></div>
-            <div className="brand-setting"><div className="brand-preview"><img src="/ocliq-logo.png" alt="Ocliq"/></div><div><strong>Ocliq Signature</strong><small>Bleu profond · Typographie claire · Logo complet</small></div><span className="active-setting"><Check/> Actif</span></div>
+            <div className="settings-card-title"><span><Palette/></span><div><h2>Identité des rapports</h2><p>Personnalisez chaque ACM avec votre logo, votre titre et le nom de votre agence.</p></div></div>
+            <div className="branding-editor">
+              <div className="brand-logo-area">
+                <div className="brand-logo-box">
+                  {branding.logoDataUrl ? <img src={branding.logoDataUrl} alt="Logo du courtier"/> : <div className="brand-logo-placeholder"><Upload size={24}/><span>Téléverser votre logo</span></div>}
+                </div>
+                <div className="brand-logo-actions">
+                  <label className="secondary-action brand-upload-btn">
+                    <Upload size={15}/> {branding.logoDataUrl ? "Changer le logo" : "Ajouter un logo"}
+                    <input type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" hidden onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      if (file.size > 2_000_000) { notify("Image trop lourde (max 2 Mo)"); return; }
+                      const reader = new FileReader();
+                      reader.onload = () => updateBranding("logoDataUrl", String(reader.result));
+                      reader.readAsDataURL(file);
+                    }}/>
+                  </label>
+                  {branding.logoDataUrl && <button type="button" className="text-action" onClick={() => updateBranding("logoDataUrl", "")}>Retirer le logo</button>}
+                  <small>PNG, JPEG ou SVG · max 2 Mo · apparaît sur la couverture et les en-têtes du PDF.</small>
+                </div>
+              </div>
+              <div className="settings-fields">
+                <label><span>Titre professionnel</span><input value={branding.brokerTitle} onChange={(e) => updateBranding("brokerTitle", e.target.value)} placeholder="Courtier immobilier résidentiel"/></label>
+                <label><span>Nom de l'agence / bannière</span><input value={branding.agencyName} onChange={(e) => updateBranding("agencyName", e.target.value)} placeholder="RE/MAX, Royal LePage, indépendant…"/></label>
+                <label className="span-2"><span>Slogan du rapport</span><input value={branding.slogan} onChange={(e) => updateBranding("slogan", e.target.value)} placeholder="La valeur expliquée avec clarté."/></label>
+              </div>
+              <div className="brand-pdf-preview">
+                <div className="brand-pdf-mini">
+                  <div className="brand-pdf-mini-header">
+                    {branding.logoDataUrl ? <img src={branding.logoDataUrl} alt=""/> : <div className="brand-pdf-mini-logo"><img src="/ocliq-logo.png" alt="Ocliq"/></div>}
+                    <span>{branding.agencyName || profile.brokerage_name || "Votre agence"}</span>
+                  </div>
+                  <strong>{branding.slogan || "La valeur expliquée avec clarté."}</strong>
+                  <small>{profile.full_name || "Votre nom"} · {branding.brokerTitle || "Courtier immobilier"}</small>
+                </div>
+                <span className="brand-pdf-caption"><Eye size={14}/> Aperçu couverture du PDF</span>
+              </div>
+            </div>
           </section>
           <section id="security" className="settings-card">
             <div className="settings-card-title"><span><ShieldCheck/></span><div><h2>Compte et sécurité</h2><p>Gérez la session de ce courtier et quittez l’espace sécurisé.</p></div></div>
@@ -1121,6 +1071,10 @@ export default function StudioApp({ userEmail, demoMode = false }: { userEmail: 
     return statusMatch && queryMatch;
   }), [comparables, filter, query]);
   const selectedCount = comparables.filter((item) => item.included).length;
+  const soldAverage = useMemo(() => {
+    const sold = comparables.filter((item) => item.included && item.status === "Vendue");
+    return sold.length ? Math.round(sold.reduce((sum, item) => sum + item.price, 0) / sold.length) : 0;
+  }, [comparables]);
   const selectedAdjustedValues = comparables.filter((item) => item.included).map((item) => item.price + item.adjustment).sort((a, b) => a - b);
   const selectedRange = selectedAdjustedValues.length ? `${formatCAD(selectedAdjustedValues[0])} à ${formatCAD(selectedAdjustedValues[selectedAdjustedValues.length - 1])}` : "À calculer après la première sélection";
 
@@ -1181,7 +1135,7 @@ export default function StudioApp({ userEmail, demoMode = false }: { userEmail: 
       void import("@/lib/generate-acm-pdf");
       setActiveNav(0);
       setScreen("editor");
-      setActiveStep(1);
+      setActiveStep(0);
       setDrawerOpen(false);
       setSaveState("saved");
       flash("Données prêtes — les médias continuent de charger en arrière-plan.");
@@ -1259,11 +1213,13 @@ export default function StudioApp({ userEmail, demoMode = false }: { userEmail: 
       flash("Enregistrez d’abord la propriété sujet");
       return;
     }
-    if (step > 1 && selectedCount === 0) {
+    if (step === 4 && selectedCount === 0) {
       flash("Ajoutez et retenez au moins un comparable avant de poursuivre");
       return;
     }
     setActiveStep(step);
+    if (step === 1) setFilter("En vigueur");
+    if (step === 2) setFilter("Vendue");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -1271,6 +1227,11 @@ export default function StudioApp({ userEmail, demoMode = false }: { userEmail: 
     setSubject(next);
     if (reportId) setReports((items) => items.map((item) => item.id === reportId ? { ...item, title: `ACM - ${next.address}`, subjectAddress: next.address || "Adresse à compléter", subjectCity: next.city || "Municipalité à compléter", updatedAt: new Date().toISOString() } : item));
   };
+
+  const pdfBranding = useMemo(() => ({
+    ...(brokerProfile.branding ?? defaultBranding),
+    brokerName: brokerProfile.full_name || "",
+  }), [brokerProfile]);
 
   const downloadPdf = async () => {
     if (pdfGenerating) return;
@@ -1281,12 +1242,12 @@ export default function StudioApp({ userEmail, demoMode = false }: { userEmail: 
     setPdfGenerating(true);
     try {
       const { generateAcmPdf } = await import("@/lib/generate-acm-pdf");
-      await generateAcmPdf(comparables, subject);
+      await generateAcmPdf(comparables, subject, pdfBranding);
       if (reportId) {
         if (!demoMode) await markReportReady(reportId);
         setReports((items) => items.map((item) => item.id === reportId ? { ...item, status: "ready", workflowStep: 5, updatedAt: new Date().toISOString() } : item));
       }
-      flash("Rapport PDF Ocliq téléchargé");
+      flash("Rapport PDF téléchargé");
     } catch {
       flash("Impossible de créer le PDF pour le moment");
     } finally {
@@ -1299,7 +1260,7 @@ export default function StudioApp({ userEmail, demoMode = false }: { userEmail: 
       flash("Complétez le dossier et retenez au moins un comparable avant l’aperçu");
       return;
     }
-    const signature = JSON.stringify([subject, comparables]);
+    const signature = JSON.stringify([subject, comparables, pdfBranding]);
     setPreviewOpen(true);
     if (previewUrl && previewSignature.current === signature) return;
     setPdfGenerating(true);
@@ -1307,7 +1268,7 @@ export default function StudioApp({ userEmail, demoMode = false }: { userEmail: 
     setPreviewUrl(null);
     try {
       const { createAcmPdfPreviewUrl } = await import("@/lib/generate-acm-pdf");
-      const nextUrl = await createAcmPdfPreviewUrl(comparables, subject);
+      const nextUrl = await createAcmPdfPreviewUrl(comparables, subject, pdfBranding);
       previewSignature.current = signature;
       setPreviewUrl(nextUrl);
     } catch {
@@ -1418,18 +1379,18 @@ export default function StudioApp({ userEmail, demoMode = false }: { userEmail: 
             <>
               <section className="analysis-heading">
                 <div><span className="analysis-eyebrow">{frCA.analysis.eyebrow}<i/></span><div className="analysis-title-line"><h1>{subject.address || "Nouvelle analyse"}</h1><button aria-label="Modifier le dossier" onClick={() => handleStep(0)}><SquarePen size={16}/></button></div><p>{subject.city || "Municipalité à compléter"}<span/> {subject.owners ? `Pour ${subject.owners}` : "Client à compléter"}</p></div>
-                <div className="analysis-heading-actions"><button className="secondary-action dashboard-return" onClick={() => void returnToDashboard()}><LayoutDashboard size={17}/> Tableau de bord</button>{activeStep < 4 && <button className="secondary-action" onClick={() => void reviewPdf()}><Eye size={17}/>{frCA.common.preview}</button>}{activeStep < 5 && <button className="primary-action report-shortcut" onClick={() => handleStep(5)}><Download size={17}/> Finaliser le rapport</button>}</div>
+                <div className="analysis-heading-actions"><button className="secondary-action dashboard-return" onClick={() => void returnToDashboard()}><LayoutDashboard size={17}/> Tableau de bord</button>{activeStep < 4 && <button className="secondary-action" onClick={() => void reviewPdf()}><Eye size={17}/>{frCA.common.preview}</button>}{activeStep < 4 && <button className="primary-action report-shortcut" onClick={() => handleStep(4)}><Download size={17}/> Finaliser le rapport</button>}</div>
               </section>
 
               <section className="workflow-stepper" aria-label="Progression de l’analyse" style={{ gridTemplateColumns: `repeat(${frCA.steps.length}, minmax(0, 1fr))` }}>
-                {frCA.steps.map((step, index) => { const Icon = stepVisuals[index]; const complete = index < activeStep; const locked = (index > 0 && !subject.address) || (index > 1 && selectedCount === 0); return <button key={step.title} type="button" onClick={() => handleStep(index)} className={`${index === activeStep ? "current" : ""} ${complete ? "complete" : ""} ${locked ? "locked" : ""}`} aria-current={index === activeStep ? "step" : undefined} aria-disabled={locked}><span className="step-icon">{complete ? <Check size={15} strokeWidth={3}/> : <Icon size={16}/>}</span><span className="step-text"><small>{String(index + 1).padStart(2, "0")}</small><strong>{step.short}</strong></span>{index < frCA.steps.length - 1 && <i/>}</button>; })}
+                {frCA.steps.map((step, index) => { const Icon = stepVisuals[index]; const complete = index < activeStep; const locked = index > 0 && !subject.address; return <button key={step.title} type="button" onClick={() => handleStep(index)} className={`${index === activeStep ? "current" : ""} ${complete ? "complete" : ""} ${locked ? "locked" : ""}`} aria-current={index === activeStep ? "step" : undefined} aria-disabled={locked}><span className="step-icon">{complete ? <Check size={15} strokeWidth={3}/> : <Icon size={16}/>}</span><span className="step-text"><small>{String(index + 1).padStart(2, "0")}</small><strong>{step.short}</strong></span>{index < frCA.steps.length - 1 && <i/>}</button>; })}
               </section>
 
               <div key={`${screen}-${activeStep}`} className="step-stage">
-              {activeStep === 1 ? (
+              {activeStep === 1 || activeStep === 2 ? (
                 <div className="workflow-layout">
                   <section className="comparables-panel">
-                    <div className="panel-heading"><div><span className="section-kicker">{frCA.comparables.eyebrow}</span><h2>{frCA.comparables.title}</h2><p>{frCA.comparables.intro}</p></div><button className="primary-action" onClick={() => { setEditingComparableId(null); setDrawerOpen(true); }}><Plus size={17}/>{frCA.comparables.add}</button></div>
+                    <div className="panel-heading"><div><span className="section-kicker">{activeStep === 1 ? "INSCRIPTIONS EN VIGUEUR" : "VENTES COMPARABLES"}</span><h2>{activeStep === 1 ? "Propriétés actuellement en vigueur" : "Propriétés récemment vendues"}</h2><p>{activeStep === 1 ? "La concurrence active aide à situer le prix demandé, sans être traitée comme une vente." : "Les ventes retenues portent la recommandation de prix."}</p></div><button className="primary-action" onClick={() => { setEditingComparableId(null); setDrawerOpen(true); }}><Plus size={17}/>{frCA.comparables.add}</button></div>
                     <div className="selection-summary"><div className="summary-avatars">{comparables.filter((item) => item.included).slice(0, 4).map((item) => <PropertyPhoto key={item.id} className="summary-avatar-photo" src={item.image} latitude={item.latitude} longitude={item.longitude} alt="" priority/>)}{selectedCount > 4 && <span>+{selectedCount - 4}</span>}</div><p><strong>{selectedCount} propriétés {frCA.comparables.selected}</strong><span>Fourchette ajustée : {selectedRange}</span></p><div className="selection-score">{selectedCount ? <ScoreRing value={Math.min(95, 55 + selectedCount * 7)}/> : <span className="selection-empty-icon"><Plus size={17}/></span>}<span><strong>{selectedCount >= 3 ? "Sélection exploitable" : "Sélection à compléter"}</strong><small>{selectedCount ? "selon la proximité et la similarité" : "ajoutez votre premier comparable"}</small></span></div></div>
                     <div className="filter-bar">
                       <div className="status-tabs">{statusOptions.map((status) => { const label = status === "Toutes" ? frCA.comparables.filterAll : status; const count = status === "Toutes" ? comparables.length : comparables.filter((item) => item.status === status).length; return <button key={status} className={filter === status ? "active" : ""} onClick={() => setFilter(status)}>{label}<span>{count}</span></button>; })}</div>
@@ -1440,12 +1401,12 @@ export default function StudioApp({ userEmail, demoMode = false }: { userEmail: 
                       <div className={`comparables-list ${view}`}>{filtered.length ? filtered.map((comparable, index) => <ComparableRow key={comparable.id} comparable={comparable} view={view} priority={index < 4} onToggle={() => toggleComparable(comparable.id)} expanded={expandedId === comparable.id} onExpand={() => setExpandedId(expandedId === comparable.id ? null : comparable.id)} onEdit={() => { setEditingComparableId(comparable.id); setDrawerOpen(true); }}/>) : <div className="empty-state"><Search/><h3>Aucun comparable trouvé</h3><p>Essayez un autre mot-clé ou retirez un filtre.</p><button className="text-action" onClick={() => { setFilter("Toutes"); setQuery(""); }}>Réinitialiser les filtres</button></div>}</div>
                     )}
                   </section>
-                  <InsightPanel comparables={comparables} onContinue={() => handleStep(2)}/>
+                  <InsightPanel comparables={comparables} onContinue={() => handleStep(activeStep === 1 ? 2 : 3)}/>
                 </div>
-              ) : <StepContent step={activeStep} comparables={comparables} subject={subject} onSubjectChange={updateSubject} onPreview={() => void reviewPdf()} onDownload={() => void downloadPdf()} pdfGenerating={pdfGenerating} onNotify={flash}/>} 
+              ) : <StepContent step={activeStep} subject={subject} onSubjectChange={updateSubject} onPreview={() => void reviewPdf()} onDownload={() => void downloadPdf()} pdfGenerating={pdfGenerating} onNotify={flash} soldAverage={soldAverage} addressField={<AddressAutocomplete defaultValue={subject.address} onResolved={(location) => { const parts = parseAddressParts(location.text); updateSubject({ ...subject, address: location.text, city: location.city ?? subject.city, postalCode: location.postalCode ?? subject.postalCode, latitude: location.latitude ?? subject.latitude, longitude: location.longitude ?? subject.longitude, image: typeof location.latitude === "number" && typeof location.longitude === "number" ? propertyStreetViewUrl(location.latitude, location.longitude) : subject.image, civicNumber: parts.civicNumber || subject.civicNumber, street: parts.street || subject.street, province: subject.province || "Québec" }); }}/>}/>} 
 
-              {activeStep !== 1 && (
-                <div className="step-footer"><button className="secondary-action" onClick={() => handleStep(Math.max(activeStep - 1, 0))}><ArrowLeft size={16}/>{frCA.common.back}</button><span><Check size={14}/>{frCA.analysis.updated}</span><button className="primary-action" onClick={() => activeStep < 5 ? handleStep(activeStep + 1) : void finishReview()}>{activeStep < 5 ? "Continuer" : "Finaliser et retourner au tableau de bord"}<ArrowRight size={16}/></button></div>
+              {activeStep !== 1 && activeStep !== 2 && (
+                <div className="step-footer"><button className="secondary-action" onClick={() => handleStep(Math.max(activeStep - 1, 0))}><ArrowLeft size={16}/>{frCA.common.back}</button><span><Check size={14}/>{frCA.analysis.updated}</span><button className="primary-action" onClick={() => activeStep < 4 ? handleStep(activeStep + 1) : void finishReview()}>{activeStep < 4 ? "Continuer" : "Finaliser et retourner au tableau de bord"}<ArrowRight size={16}/></button></div>
               )}
               </div>
             </>
@@ -1453,7 +1414,7 @@ export default function StudioApp({ userEmail, demoMode = false }: { userEmail: 
         </main>
       </div>
 
-      {drawerOpen && <ComparableDrawer comparable={comparables.find((item) => item.id === editingComparableId)} onClose={() => setDrawerOpen(false)} onSave={(item, continueWorkflow) => { setComparables((items) => items.some((existing) => existing.id === item.id) ? items.map((existing) => existing.id === item.id ? item : existing) : [item, ...items]); setDrawerOpen(false); if (continueWorkflow) handleStep(2); flash(continueWorkflow ? "Comparable enregistré - poursuivez avec les ajustements" : editingComparableId ? "Fiche comparable mise à jour" : "Comparable ajouté à l’analyse"); }}/>} 
+      {drawerOpen && <ComparableDrawer comparable={comparables.find((item) => item.id === editingComparableId)} onClose={() => setDrawerOpen(false)} onSave={(item, continueWorkflow) => { setComparables((items) => items.some((existing) => existing.id === item.id) ? items.map((existing) => existing.id === item.id ? item : existing) : [item, ...items]); setDrawerOpen(false); if (continueWorkflow) handleStep(activeStep === 1 ? 2 : 3); flash(continueWorkflow ? "Comparable enregistré" : editingComparableId ? "Fiche comparable mise à jour" : "Comparable ajouté à l’analyse"); }}/>} 
       {previewOpen && <PdfPreview onClose={() => setPreviewOpen(false)} url={previewUrl} loading={pdfGenerating} onDownload={() => void downloadPdf()}/>} 
       {helpOpen && <HelpPanel onClose={() => setHelpOpen(false)} onOpenSettings={() => openSettings("profile")}/>}
       {toast && <div className="toast"><CheckCircle2 size={18}/>{toast}</div>}

@@ -1,3 +1,6 @@
+import type { AcmAnnexe } from "@/lib/quebec-acm";
+import { defaultBrokerNote, defaultIntroduction } from "@/lib/quebec-acm";
+
 export type ComparableStatus = "Vendue" | "En vigueur" | "Expirée" | "Retirée";
 
 export type ComparableSource = "Centris / collaboration" | "Registre foncier" | "Rôle municipal" | "Saisie manuelle";
@@ -7,6 +10,12 @@ export type SubjectProperty = {
   type: string; beds: number; baths: number; area: number; year: number; assessment: number; landAssessment: number; buildingAssessment: number;
   timeframe: string; context: string; strengths: string; considerations: string;
   latitude?: number; longitude?: number; image?: string;
+  civicNumber?: string; unit?: string; street?: string; province?: string;
+  analysisDate?: string; analysisPurpose?: string; analysisPeriodMonths?: number;
+  buildingType?: string; lotArea?: number; parkingCount?: number; garageCount?: number;
+  rooms?: number; powderRooms?: number; levels?: number; assessmentYear?: number;
+  priceOffensive?: number; priceRealistic?: number; priceOptimistic?: number; soldAverageOverride?: number;
+  introduction?: string; brokerNote?: string; includeBrokerNote?: boolean; annexes?: AcmAnnexe[];
 };
 
 export function propertyStreetViewUrl(latitude: number, longitude: number) {
@@ -25,6 +34,16 @@ export const initialSubject: SubjectProperty = {
   strengths: "Cuisine rénovée, grande cour intime, sous-sol aménagé et garage attaché.", considerations: "Toiture de 2012 et salle de bain principale à moderniser.",
   latitude: 48.2248634, longitude: -79.0284795,
   image: propertyStreetViewUrl(48.2248634, -79.0284795),
+  civicNumber: "218", street: "rue des Pins", unit: "", province: "Québec",
+  analysisDate: "2026-08-17", analysisPurpose: "Établir le prix de mise en marché", analysisPeriodMonths: 6,
+  buildingType: "Détaché", lotArea: 6690, parkingCount: 4, garageCount: 1, rooms: 12, powderRooms: 0, levels: 1, assessmentYear: 2025,
+  priceOffensive: 37900000, priceRealistic: 39400000, priceOptimistic: 40900000, soldAverageOverride: 0,
+  introduction: defaultIntroduction("Marianne Lavoie et Simon Beaudry", "Rouyn-Noranda"),
+  brokerNote: defaultBrokerNote, includeBrokerNote: true,
+  annexes: [
+    { id: "annexe-role", kind: "Rôle d’évaluation", title: "Rôle municipal 2025", note: "Terrain 74 500 $ · Bâtiment 252 300 $." },
+    { id: "annexe-cert", kind: "Certificat de localisation", title: "Certificat de localisation", note: "À joindre au dossier avant la présentation client." },
+  ],
 };
 
 export type Comparable = {

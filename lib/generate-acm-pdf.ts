@@ -1,5 +1,6 @@
 import { jsPDF } from "jspdf";
 import { initialSubject, propertyMapUrl, propertyStreetViewUrl, type Comparable, type SubjectProperty } from "@/lib/demo-data";
+import type { BrokerBranding } from "@/lib/acm-repository";
 
 type ReportAssets = {
   logo?: string;
@@ -7,6 +8,7 @@ type ReportAssets = {
   subjectMap?: string;
   subjectStreetView?: string;
   comparableImages?: Record<string, string>;
+  branding?: BrokerBranding & { brokerName?: string };
 };
 
 const PAGE_W = 215.9;
@@ -62,12 +64,13 @@ function brandMark(doc: jsPDF, x: number, y: number, dark = false) {
   doc.text("Ocliq", x + 13, y + 7.6);
 }
 
-function header(doc: jsPDF, title: string, section: string, logo?: string) {
+function header(doc: jsPDF, title: string, section: string, logo?: string, customLogo?: string) {
   doc.setFillColor(...NAVY);
   doc.rect(0, 0, PAGE_W, 19, "F");
-  if (logo) {
+  const headerLogo = customLogo || logo;
+  if (headerLogo) {
     try {
-      doc.addImage(logo, "PNG", MARGIN, 3.1, 30.6, 13);
+      doc.addImage(headerLogo, "PNG", MARGIN, 3.1, 30.6, 13);
     } catch {
       brandMark(doc, MARGIN, 4.5, true);
     }
@@ -83,12 +86,12 @@ function header(doc: jsPDF, title: string, section: string, logo?: string) {
   doc.line(MARGIN, 43, MARGIN + 24, 43);
 }
 
-function addFooter(doc: jsPDF, pageNumber: number, total: number) {
+function addFooter(doc: jsPDF, pageNumber: number, total: number, footerLabel?: string) {
   doc.setDrawColor(...LINE);
   doc.setLineWidth(.25);
   doc.line(MARGIN, PAGE_H - 14, PAGE_W - MARGIN, PAGE_H - 14);
   setText(doc, MUTED, 7);
-  doc.text("Analyse comparative de marché - Document confidentiel", MARGIN, PAGE_H - 8.7);
+  doc.text(footerLabel || "Analyse comparative de marché - Document confidentiel", MARGIN, PAGE_H - 8.7);
   doc.text(`${pageNumber} / ${total}`, PAGE_W - MARGIN, PAGE_H - 8.7, { align: "right" });
 }
 
@@ -136,16 +139,23 @@ function drawCover(doc: jsPDF, included: Comparable[], assets: ReportAssets, sub
   doc.setFillColor(18, 57, 124);
   doc.circle(-22, PAGE_H - 4, 62, "F");
 
-  if (assets.logo) {
-    try { doc.addImage(assets.logo, "PNG", MARGIN, 16, 47, 20); } catch { brandMark(doc, MARGIN, 19, true); }
+  const brand = assets.branding;
+  const coverLogo = brand?.logoDataUrl || assets.logo;
+  if (coverLogo) {
+    try { doc.addImage(coverLogo, "PNG", MARGIN, 16, 47, 20); } catch { brandMark(doc, MARGIN, 19, true); }
   } else {
     brandMark(doc, MARGIN, 19, true);
+  }
+  if (brand?.agencyName) {
+    setText(doc, [205, 218, 242], 8);
+    doc.text(clean(brand.agencyName), MARGIN, 42);
   }
 
   setText(doc, [145, 181, 255], 8, "bold");
   doc.text("ANALYSE COMPARATIVE DE MARCHÉ", MARGIN, 64);
+  const sloganLines = (brand?.slogan || "La valeur expliquée avec clarté.").split("\n").slice(0, 2);
   setText(doc, [255, 255, 255], 28, "bold");
-  doc.text(["La valeur expliquée", "avec clarté."], MARGIN, 82, { lineHeightFactor: 1.05 });
+  doc.text(sloganLines, MARGIN, 82, { lineHeightFactor: 1.05 });
   setText(doc, [205, 218, 242], 11);
   doc.text(clean(subject.address), MARGIN, 106);
   doc.text(clean(subject.city), MARGIN, 113);
@@ -162,17 +172,24 @@ function drawCover(doc: jsPDF, included: Comparable[], assets: ReportAssets, sub
   doc.text(`Point central des comparables ajustés : ${cad(central)}`, PAGE_W - MARGIN - 7, 241, { align: "right" });
 
   setText(doc, [255, 255, 255], 9, "bold");
-  doc.text("Préparée pour", MARGIN, 262);
+  doc.text("Préparée pour", MARGIN, 258);
   setText(doc, [205, 218, 242], 8.5);
-  doc.text(subject.owners, MARGIN, 268);
+  doc.text(subject.owners, MARGIN, 264);
+
+  const brokerName = brand?.brokerName || "Courtier";
+  const brokerTitle = brand?.brokerTitle || "Courtier immobilier résidentiel";
   setText(doc, [255, 255, 255], 9, "bold");
-  doc.text("Gabriel Arseneault", PAGE_W - MARGIN, 262, { align: "right" });
+  doc.text(clean(brokerName), PAGE_W - MARGIN, 258, { align: "right" });
   setText(doc, [205, 218, 242], 8.5);
-  doc.text("Courtier immobilier résidentiel", PAGE_W - MARGIN, 268, { align: "right" });
+  doc.text(clean(brokerTitle), PAGE_W - MARGIN, 264, { align: "right" });
+  if (brand?.agencyName) {
+    setText(doc, [205, 218, 242], 7.5);
+    doc.text(clean(brand.agencyName), PAGE_W - MARGIN, 270, { align: "right" });
+  }
 }
 
 function drawSummary(doc: jsPDF, included: Comparable[], assets: ReportAssets, subject: SubjectProperty) {
-  header(doc, "Votre analyse en bref", "01 - Décision", assets.logo);
+  header(doc, "Votre analyse en bref", "01 - Décision", assets.logo, assets.branding?.logoDataUrl);
   const sold = included.filter((item) => item.status === "Vendue");
   const adjusted = (sold.length ? sold : included).map((item) => item.adjusted).filter(Boolean);
   const rangeLow = adjusted.length ? Math.min(...adjusted) : 0;
@@ -180,9 +197,10 @@ function drawSummary(doc: jsPDF, included: Comparable[], assets: ReportAssets, s
   const midpoint = median(adjusted);
   const avgDays = sold.length ? Math.round(sold.reduce((sum, item) => sum + item.days, 0) / sold.length) : 0;
 
-  paragraph(doc, "L'ACM transforme les ventes récentes et les inscriptions concurrentes en une lecture simple du marché. La recommandation finale demeure un jugement professionnel, appuyé par les données ci-dessous.", MARGIN, 53, PAGE_W - MARGIN * 2, 10, MUTED);
+  paragraph(doc, subject.introduction?.trim() || "L'ACM transforme les ventes récentes et les inscriptions concurrentes en une lecture simple du marché. La recommandation finale demeure un jugement professionnel, appuyé par les données ci-dessous.", MARGIN, 53, PAGE_W - MARGIN * 2, 10, MUTED);
   setText(doc, BLUE_DARK, 7.2, "bold");
-  doc.text(`ANALYSE DU 9 AOÛT 2026 - PÉRIODE OBSERVÉE : 6 MOIS - ${included.length} PROPRIÉTÉS RETENUES`, MARGIN, 69);
+  const analysisDate = subject.analysisDate ? new Intl.DateTimeFormat("fr-CA", { day: "numeric", month: "long", year: "numeric", timeZone: "America/Toronto" }).format(new Date(`${subject.analysisDate}T12:00:00`)) : "date à confirmer";
+  doc.text(clean(`ANALYSE DU ${analysisDate.toUpperCase()} - PÉRIODE OBSERVÉE : ${subject.analysisPeriodMonths || 6} MOIS - ${included.length} PROPRIÉTÉS RETENUES`), MARGIN, 69);
 
   metric(doc, MARGIN, 76, 55, "Fourchette ajustée", `${cad(rangeLow)} à ${cad(rangeHigh)}`, true);
   metric(doc, MARGIN + 61, 76, 55, "Point central", cad(midpoint), true);
@@ -229,7 +247,7 @@ function drawSummary(doc: jsPDF, included: Comparable[], assets: ReportAssets, s
 
 function drawMarketRatios(doc: jsPDF, included: Comparable[], assets: ReportAssets) {
   doc.addPage();
-  header(doc, "Les ratios qui racontent le marché", "03 - Ratios de marché", assets.logo);
+  header(doc, "Les ratios qui racontent le marché", "03 - Ratios de marché", assets.logo, assets.branding?.logoDataUrl);
   const sold = included.filter((item) => item.status === "Vendue");
   const saleListRatios = sold.filter((item) => item.originalListPrice).map((item) => item.price / (item.originalListPrice || item.price));
   const pricePerLiving = sold.filter((item) => item.area).map((item) => item.price / item.area);
@@ -286,7 +304,7 @@ function drawMarketRatios(doc: jsPDF, included: Comparable[], assets: ReportAsse
 
 function drawValuationMethods(doc: jsPDF, included: Comparable[], assets: ReportAssets, subject: SubjectProperty) {
   doc.addPage();
-  header(doc, "La valeur sous plusieurs angles", "04 - Méthodes de valeur", assets.logo);
+  header(doc, "La valeur sous plusieurs angles", "04 - Méthodes de valeur", assets.logo, assets.branding?.logoDataUrl);
   const sold = included.filter((item) => item.status === "Vendue");
   const adjusted = sold.map((item) => item.adjusted).filter(Boolean);
   const meanSale = average(sold.map((item) => item.price));
@@ -341,7 +359,7 @@ function drawValuationMethods(doc: jsPDF, included: Comparable[], assets: Report
 
 function drawValueContext(doc: jsPDF, included: Comparable[], assets: ReportAssets) {
   doc.addPage();
-  header(doc, "La fourchette en un regard", "02 - Valeur et localisation", assets.logo);
+  header(doc, "La fourchette en un regard", "02 - Valeur et localisation", assets.logo, assets.branding?.logoDataUrl);
   const values = included.map((item) => item.adjusted).filter((value) => value > 0);
   const low = values.length ? Math.min(...values) : 0;
   const high = values.length ? Math.max(...values) : 0;
@@ -406,7 +424,7 @@ function drawValueContext(doc: jsPDF, included: Comparable[], assets: ReportAsse
 }
 
 function drawComparison(doc: jsPDF, included: Comparable[], assets: ReportAssets) {
-  header(doc, "Les propriétés qui fondent la valeur", "05 - Comparables", assets.logo);
+  header(doc, "Les propriétés qui fondent la valeur", "05 - Comparables", assets.logo, assets.branding?.logoDataUrl);
   paragraph(doc, `${included.length} propriétés ont été retenues pour leur proximité, leur récence et leur similarité avec le sujet. Les prix actifs sont présentés comme contexte et non comme preuve d'une vente réalisée.`, MARGIN, 53, PAGE_W - MARGIN * 2, 9.5, MUTED);
 
   const rows = included.slice(0, 7);
@@ -460,7 +478,7 @@ function drawComparablePages(doc: jsPDF, included: Comparable[], assets: ReportA
   for (let index = 0; index < included.length; index += 2) pages.push(included.slice(index, index + 2));
   pages.forEach((items, pageIndex) => {
     doc.addPage();
-    header(doc, "Détail des comparables", `06 - Lecture détaillée ${pageIndex + 1}/${pages.length}`, assets.logo);
+    header(doc, "Détail des comparables", `06 - Lecture détaillée ${pageIndex + 1}/${pages.length}`, assets.logo, assets.branding?.logoDataUrl);
     items.forEach((item, itemIndex) => {
       const y = 52 + itemIndex * 102;
       const image = assets.comparableImages?.[item.id];
@@ -503,14 +521,14 @@ function drawComparablePages(doc: jsPDF, included: Comparable[], assets: ReportA
   });
 }
 
-function drawRecommendation(doc: jsPDF, included: Comparable[], assets: ReportAssets) {
+function drawRecommendation(doc: jsPDF, included: Comparable[], assets: ReportAssets, subject: SubjectProperty) {
   doc.addPage();
-  header(doc, "Positionnement recommandé", "07 - Stratégie", assets.logo);
+  header(doc, "Positionnement recommandé", "07 - Stratégie", assets.logo, assets.branding?.logoDataUrl);
   const soldAdjusted = included.filter((item) => item.status === "Vendue").map((item) => item.adjusted);
   const base = median(soldAdjusted.length ? soldAdjusted : included.map((item) => item.adjusted));
-  const low = Math.round(base * .977 / 100000) * 100000;
-  const high = Math.round(base * 1.03 / 100000) * 100000;
-  const launch = Math.round(base * 1.01 / 100000) * 100000;
+  const low = subject.priceOffensive || Math.round(base * .977 / 100000) * 100000;
+  const high = subject.priceOptimistic || Math.round(base * 1.03 / 100000) * 100000;
+  const launch = subject.priceRealistic || Math.round(base * 1.01 / 100000) * 100000;
 
   doc.setFillColor(...NAVY);
   doc.roundedRect(MARGIN, 53, PAGE_W - MARGIN * 2, 58, 5, 5, "F");
@@ -522,9 +540,9 @@ function drawRecommendation(doc: jsPDF, included: Comparable[], assets: ReportAs
   doc.text(`Prix de lancement suggéré : ${cad(launch)}`, MARGIN + 9, 99);
 
   const scenarios = [
-    { title: "Accéléré", price: Math.round(base * .97 / 100000) * 100000, text: "Maximise l'attention dès les premiers jours et réduit le risque de stagnation." },
-    { title: "Recommandé", price: launch, text: "Équilibre la valeur démontrée, la concurrence actuelle et le comportement des acheteurs." },
-    { title: "Ambitieux", price: Math.round(base * 1.05 / 100000) * 100000, text: "Teste le haut du marché avec un délai potentiel plus long et moins de visites." },
+    { title: "Offensif", price: low, text: "Accélère les visites et réduit le risque de stagnation, avec plus de pression sur le prix." },
+    { title: "Réaliste", price: launch, text: "Équilibre la valeur démontrée, la concurrence actuelle et le comportement des acheteurs." },
+    { title: "Optimiste", price: high, text: "Teste le haut du marché avec un délai potentiel plus long et moins de visites." },
   ];
   scenarios.forEach((scenario, index) => {
     const x = MARGIN + index * 61;
@@ -546,9 +564,9 @@ function drawRecommendation(doc: jsPDF, included: Comparable[], assets: ReportAs
   doc.text("Prochaine étape : valider ensemble le scénario qui correspond à votre échéancier.", MARGIN + 6, 255.5);
 }
 
-function drawMethod(doc: jsPDF, included: Comparable[], assets: ReportAssets) {
+function drawMethod(doc: jsPDF, included: Comparable[], assets: ReportAssets, subject: SubjectProperty) {
   doc.addPage();
-  header(doc, "Une conclusion traçable", "08 - Méthodologie", assets.logo);
+  header(doc, "Une conclusion traçable", "08 - Méthodologie", assets.logo, assets.branding?.logoDataUrl);
   const blocks = [
     ["1. Sélection", `${included.length} propriétés retenues selon la proximité, la date, le type, la superficie et l'état général.`],
     ["2. Vérification", "Les renseignements proviennent des sources indiquées dans chaque fiche. Les prix vendus doivent être confirmés avant diffusion."],
@@ -570,32 +588,69 @@ function drawMethod(doc: jsPDF, included: Comparable[], assets: ReportAssets) {
   paragraph(doc, documents.join(" - ") || "Sources indiquées dans les fiches comparables.", MARGIN, 203, PAGE_W - MARGIN * 2, 7.4, MUTED, 1.25);
   setText(doc, INK, 10.5, "bold");
   doc.text("Notes du courtier", MARGIN, 220);
-  paragraph(doc, "La fourchette recommandée repose principalement sur les ventes ajustées. L'inscription active mesure la concurrence sans être traitée comme une vente réalisée.", MARGIN, 227, PAGE_W - MARGIN * 2, 7.4, MUTED, 1.25);
+  paragraph(doc, subject.includeBrokerNote === false ? "Note du courtier non incluse à la demande de l'auteur." : (subject.brokerNote?.trim() || "La fourchette recommandée repose principalement sur les ventes ajustées. L'inscription active mesure la concurrence sans être traitée comme une vente réalisée."), MARGIN, 227, PAGE_W - MARGIN * 2, 7.4, MUTED, 1.25);
   setText(doc, INK, 10.5, "bold");
   doc.text("Avis important", MARGIN, 244);
   paragraph(doc, "Cette ACM est une opinion de valeur pour la mise en marché. Elle ne constitue pas une évaluation agréée, une garantie de prix ou un avis juridique.", MARGIN, 251, 130, 7.1, MUTED, 1.2);
-  if (assets.logo) {
+
+  const sigLogo = assets.branding?.logoDataUrl || assets.logo;
+  if (sigLogo) {
     try {
       doc.setFillColor(...NAVY);
-      doc.roundedRect(161, 248.7, 31.5, 13.4, 2.5, 2.5, "F");
-      doc.addImage(assets.logo, "PNG", 164, 250, 25.5, 10.8);
+      doc.roundedRect(155, 245, 37, 18, 2.5, 2.5, "F");
+      doc.addImage(sigLogo, "PNG", 158, 247, 31, 14);
     } catch {
       // Leave the signature area clean when the full logo cannot be embedded.
     }
   }
-  setText(doc, MUTED, 6.8);
-  doc.text("ACM Studio", 176.7, 264, { align: "center" });
+  const sigName = assets.branding?.brokerName || "";
+  const sigTitle = assets.branding?.brokerTitle || "";
+  const sigAgency = assets.branding?.agencyName || "";
+  if (sigName || sigTitle || sigAgency) {
+    setText(doc, INK, 7.5, "bold");
+    doc.text(clean(sigName), 173.5, 266, { align: "center" });
+    setText(doc, MUTED, 6.5);
+    if (sigTitle) doc.text(clean(sigTitle), 173.5, 270, { align: "center" });
+    if (sigAgency) doc.text(clean(sigAgency), 173.5, 274, { align: "center" });
+  } else {
+    setText(doc, MUTED, 6.8);
+    doc.text("ACM Studio par Ocliq", 173.5, 266, { align: "center" });
+  }
+}
+
+function drawAnnexes(doc: jsPDF, assets: ReportAssets, subject: SubjectProperty) {
+  const annexes = (subject.annexes ?? []).filter((item) => item.title.trim() || item.note.trim());
+  if (!annexes.length) return;
+  doc.addPage();
+  header(doc, "Annexes du dossier", "09 - Annexes", assets.logo, assets.branding?.logoDataUrl);
+  paragraph(doc, "Les pièces suivantes accompagnent l'analyse. Elles documentent le rôle municipal, la localisation et tout élément que le courtier juge utile à la décision du vendeur.", MARGIN, 53, PAGE_W - MARGIN * 2, 9.3, MUTED, 1.4);
+  annexes.slice(0, 6).forEach((annexe, index) => {
+    const y = 72 + index * 28;
+    doc.setFillColor(...(index % 2 ? PALE : BLUE_PALE));
+    doc.roundedRect(MARGIN, y, PAGE_W - MARGIN * 2, 24, 4, 4, "F");
+    setText(doc, BLUE_DARK, 7, "bold");
+    doc.text(`${String(index + 1).padStart(2, "0")}  ${clean(annexe.kind).toUpperCase()}`, MARGIN + 6, y + 8);
+    setText(doc, INK, 11, "bold");
+    doc.text(clean(annexe.title || annexe.kind), MARGIN + 6, y + 15.5);
+    if (annexe.note) {
+      setText(doc, MUTED, 8);
+      doc.text(clean(annexe.note).slice(0, 110), MARGIN + 6, y + 21);
+    }
+  });
 }
 
 export function buildAcmPdf(comparables: Comparable[], assets: ReportAssets = {}, subject: SubjectProperty = initialSubject) {
   const included = comparables.filter((item) => item.included);
   const reportComparables = included.length ? included : comparables.slice(0, 5);
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "letter", compress: true });
+  const brandInfo = assets.branding;
+  const pdfAuthor = brandInfo?.brokerName || "Courtier";
+  const pdfCreator = brandInfo?.agencyName ? `ACM Studio · ${brandInfo.agencyName}` : "ACM Studio par Ocliq";
   doc.setProperties({
     title: `Analyse comparative de marché - ${subject.address}`,
-    subject: "Analyse comparative de marché Ocliq",
-    author: "Gabriel Arseneault - Ocliq",
-    creator: "ACM Studio par Ocliq",
+    subject: "Analyse comparative de marché",
+    author: pdfAuthor,
+    creator: pdfCreator,
   });
   drawCover(doc, reportComparables, assets, subject);
   doc.addPage();
@@ -606,12 +661,16 @@ export function buildAcmPdf(comparables: Comparable[], assets: ReportAssets = {}
   doc.addPage();
   drawComparison(doc, reportComparables, assets);
   drawComparablePages(doc, reportComparables, assets);
-  drawRecommendation(doc, reportComparables, assets);
-  drawMethod(doc, reportComparables, assets);
+  drawRecommendation(doc, reportComparables, assets, subject);
+  drawAnnexes(doc, assets, subject);
+  drawMethod(doc, reportComparables, assets, subject);
+  const footerLabel = brandInfo?.agencyName
+    ? `ACM · ${brandInfo.agencyName} - Document confidentiel`
+    : "Analyse comparative de marché - Document confidentiel";
   const total = doc.getNumberOfPages();
   for (let page = 2; page <= total; page += 1) {
     doc.setPage(page);
-    addFooter(doc, page, total);
+    addFooter(doc, page, total, footerLabel);
   }
   return doc;
 }
@@ -632,7 +691,7 @@ async function loadImage(url: string) {
   }
 }
 
-async function createAcmPdf(comparables: Comparable[], subject: SubjectProperty = initialSubject) {
+async function createAcmPdf(comparables: Comparable[], subject: SubjectProperty = initialSubject, branding?: BrokerBranding & { brokerName?: string }) {
   const included = comparables.filter((item) => item.included).slice(0, 7);
   const hasCoordinates = typeof subject.latitude === "number" && typeof subject.longitude === "number";
   const subjectPhoto = hasCoordinates
@@ -651,15 +710,16 @@ async function createAcmPdf(comparables: Comparable[], subject: SubjectProperty 
     })),
   ]);
   const comparableImages = Object.fromEntries(images.filter((entry): entry is readonly [string, string] => Boolean(entry[1])));
-  return buildAcmPdf(comparables, { logo, subjectImage, subjectMap, subjectStreetView, comparableImages }, subject);
+  return buildAcmPdf(comparables, { logo, subjectImage, subjectMap, subjectStreetView, comparableImages, branding }, subject);
 }
 
-export async function generateAcmPdf(comparables: Comparable[], subject: SubjectProperty = initialSubject) {
-  const doc = await createAcmPdf(comparables, subject);
-  doc.save(`ACM-Ocliq-${subject.address || "nouvelle-analyse"}.pdf`);
+export async function generateAcmPdf(comparables: Comparable[], subject: SubjectProperty = initialSubject, branding?: BrokerBranding & { brokerName?: string }) {
+  const doc = await createAcmPdf(comparables, subject, branding);
+  const slug = branding?.agencyName || "Ocliq";
+  doc.save(`ACM-${slug}-${subject.address || "nouvelle-analyse"}.pdf`);
 }
 
-export async function createAcmPdfPreviewUrl(comparables: Comparable[], subject: SubjectProperty = initialSubject) {
-  const doc = await createAcmPdf(comparables, subject);
+export async function createAcmPdfPreviewUrl(comparables: Comparable[], subject: SubjectProperty = initialSubject, branding?: BrokerBranding & { brokerName?: string }) {
+  const doc = await createAcmPdf(comparables, subject, branding);
   return URL.createObjectURL(doc.output("blob"));
 }

@@ -160,7 +160,27 @@ export async function signOut() {
   window.location.assign("/");
 }
 
-export type BrokerProfile = { full_name: string; brokerage_name: string; phone: string; email: string };
+export type BrokerBranding = {
+  brokerTitle: string;
+  slogan: string;
+  agencyName: string;
+  logoDataUrl: string;
+};
+
+export const defaultBranding: BrokerBranding = {
+  brokerTitle: "Courtier immobilier résidentiel",
+  slogan: "La valeur expliquée avec clarté.",
+  agencyName: "",
+  logoDataUrl: "",
+};
+
+export type BrokerProfile = {
+  full_name: string;
+  brokerage_name: string;
+  phone: string;
+  email: string;
+  branding?: BrokerBranding;
+};
 
 export async function loadProfile(): Promise<BrokerProfile> {
   const supabase = createClient();
