@@ -1,4 +1,35 @@
 import type { Metadata } from "next";
+import { Geist } from "next/font/google";
 import "./globals.css";
-export const metadata: Metadata={metadataBase:new URL(process.env.NEXT_PUBLIC_SITE_URL??"https://adams-lavage-auto.fr"),title:{default:"Adams Lavage Auto | Nettoyage auto à domicile",template:"%s | Adams Lavage Auto"},description:"Nettoyage automobile intérieur et extérieur, canapés et textiles à domicile à Sarcelles et en Île-de-France.",openGraph:{title:"Adams Lavage Auto",description:"Le detailing professionnel vient à vous.",locale:"fr_FR",type:"website"}};
-export default function RootLayout({children}:{children:React.ReactNode}){return <html lang="fr"><body>{children}</body></html>}
+
+const geist = Geist({
+  variable: "--font-geist",
+  subsets: ["latin"],
+});
+
+export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://acm-studio.ocliq.app"),
+  title: "ACM Studio par Ocliq",
+  description: "L’espace de travail des courtiers québécois pour créer, présenter et convertir une analyse comparative du marché.",
+  openGraph: {
+    title: "ACM Studio",
+    description: "L’analyse comparative, en toute confiance.",
+    locale: "fr_CA",
+    type: "website",
+    images: [{ url: "/og.png", width: 1200, height: 630, alt: "ACM Studio — L’analyse comparative, en toute confiance." }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "ACM Studio",
+    description: "L’analyse comparative, en toute confiance.",
+    images: ["/og.png"],
+  },
+};
+
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  return (
+    <html lang="fr-CA">
+      <body className={geist.variable}>{children}</body>
+    </html>
+  );
+}

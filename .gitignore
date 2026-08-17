@@ -40,4 +40,7 @@ next-env.d.ts
 /dist/
 /.wrangler/
 /outputs/
+/output/
 /work/
+/primalis-theme/
+tsconfig.tsbuildinfo

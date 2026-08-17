@@ -14,7 +14,7 @@ async function render() {
   );
 }
 
-test("server-renders the French-Canadian ACM workspace", async () => {
+test("server-renders the French-Canadian authenticated ACM entry", async () => {
   const response = await render();
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
@@ -22,9 +22,9 @@ test("server-renders the French-Canadian ACM workspace", async () => {
   const html = await response.text();
   assert.match(html, /<html lang="fr-CA">/i);
   assert.match(html, /<title>ACM Studio par Ocliq<\/title>/i);
-  assert.match(html, /Choisir les bonnes propriétés comparables/);
-  assert.match(html, /Données de démonstration/);
-  assert.match(html, />Partager</);
+  assert.match(html, /Transformez les données/);
+  assert.match(html, /Accéder à mon espace/);
+  assert.match(html, /Données protégées par utilisateur/);
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape/);
 });
 
@@ -40,7 +40,8 @@ test("ships the branded metadata and localized product structure", async () => {
 
   assert.match(layout, /locale: "fr_CA"/);
   assert.match(layout, /images: \[\{ url: "\/og\.png"/);
-  assert.match(page, /<StudioApp \/>/);
+  assert.match(page, /<StudioApp userEmail=/);
+  assert.match(page, /<AuthScreen\/>/);
   assert.match(locale, /Analyse comparative du marché/);
   assert.match(product, /role="switch"/);
   assert.match(product, /Aucune donnée Centris\/MLS n’est récupérée/);
