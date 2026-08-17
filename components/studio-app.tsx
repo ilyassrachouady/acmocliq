@@ -3,7 +3,7 @@
 /* Remote demonstration photography is intentionally rendered without the production image provider. */
 /* eslint-disable @next/next/no-img-element */
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { archiveReport, createWorkspace, listReports, loadProfile, loadWorkspace, markReportReady, saveProfile, saveWorkspace, signOut, type AcmReportSummary, type BrokerProfile } from "@/lib/acm-repository";
 import {
   ArrowLeft,
@@ -44,6 +44,9 @@ import {
   Settings,
   ShieldCheck,
   ClipboardCheck,
+  Copy,
+  Keyboard,
+  Mail,
   SlidersHorizontal,
   Sparkles,
   SquarePen,
@@ -596,31 +599,66 @@ function StrategyStep() {
 }
 
 function PresentationStep({ onPreview }: { onPreview: () => void }) {
-  const sections = ["Couverture", "Message de votre courtier", "Votre propriété", "Aperçu du marché", "Propriétés comparables", "Stratégie recommandée", "Plan de mise en marché", "À propos du courtier", "Prochaines étapes"];
+  const [sections, setSections] = useState([
+    { name: "Couverture", included: true },
+    { name: "Message de votre courtier", included: true },
+    { name: "Votre propriété", included: true },
+    { name: "Aperçu du marché", included: true },
+    { name: "Propriétés comparables", included: true },
+    { name: "Stratégie recommandée", included: true },
+    { name: "Plan de mise en marché", included: true },
+    { name: "À propos du courtier", included: true },
+    { name: "Prochaines étapes", included: true },
+  ]);
+  const visibleCount = sections.filter((section) => section.included).length;
   return (
     <div className="step-canvas presentation-layout">
-      <section className="editor-card"><div className="section-heading"><div><span className="section-kicker">9 sections visibles</span><h2>Construire le récit de la présentation</h2><p>Le rapport rassemble automatiquement les sections essentielles de cette ACM.</p></div><button className="secondary-action" onClick={onPreview}><Eye size={16}/> Aperçu PDF</button></div><div className="section-list">{sections.map((section, index) => <div className="section-row" key={section}><b>{index + 1}</b><strong>{section}</strong><span className="visible-pill"><Check size={14}/> Incluse</span></div>)}</div></section>
+      <section className="editor-card"><div className="section-heading"><div><span className="section-kicker">{visibleCount} sections visibles</span><h2>Construire le récit de la présentation</h2><p>Activez ou masquez les blocs du rapport avant de générer l’aperçu client.</p></div><button className="secondary-action" onClick={onPreview}><Eye size={16}/> Aperçu PDF</button></div><div className="section-list">{sections.map((section, index) => <button type="button" className={`section-row ${section.included ? "" : "section-row-off"}`} key={section.name} onClick={() => setSections((items) => items.map((item) => item.name === section.name ? { ...item, included: !item.included } : item))}><b>{index + 1}</b><strong>{section.name}</strong><span className="visible-pill">{section.included ? <><Check size={14}/> Incluse</> : "Masquée"}</span></button>)}</div></section>
       <aside className="context-card presentation-context"><Eye/><h3>Une expérience pensée pour le vendeur</h3><p>Le rapport s’adapte au téléphone, à la tablette et à l’impression. Les notes privées ne sont jamais incluses.</p><div className="device-preview"><span/><span/><span/></div></aside>
     </div>
   );
 }
 
-function ShareStep({ onPreview, onDownload, pdfGenerating }: { onPreview: () => void; onDownload: () => void; pdfGenerating: boolean }) {
-  const checks = ["Renseignements de la propriété révisés", "Comparables sélectionnés par le courtier", "Ajustements et explications validés", "Stratégie de prix confirmée", "Données sensibles révisées", "Avis juridique inclus"];
+function ShareStep({ subject, onPreview, onDownload, pdfGenerating, onNotify }: { subject: SubjectProperty; onPreview: () => void; onDownload: () => void; pdfGenerating: boolean; onNotify: (message: string) => void }) {
+  const [copied, setCopied] = useState(false);
+  const [checks, setChecks] = useState([
+    { label: "Renseignements de la propriété révisés", done: true },
+    { label: "Comparables sélectionnés par le courtier", done: true },
+    { label: "Ajustements et explications validés", done: true },
+    { label: "Stratégie de prix confirmée", done: true },
+    { label: "Données sensibles révisées", done: true },
+    { label: "Avis juridique inclus", done: true },
+  ]);
+  const copySummary = async () => {
+    const text = `ACM Ocliq — ${subject.address || "Nouvelle analyse"}, ${subject.city || "Québec"}`;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      onNotify("Résumé copié dans le presse-papiers");
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      onNotify("Impossible de copier le résumé");
+    }
+  };
+  const emailClient = () => {
+    const subjectLine = encodeURIComponent(`ACM — ${subject.address || "Analyse comparative"}`);
+    const body = encodeURIComponent(`Bonjour,\n\nVoici le résumé de l’analyse comparative pour ${subject.address || "la propriété"}.\nJe vous ferai parvenir le PDF Ocliq en pièce jointe.\n\nCordialement`);
+    window.location.href = `mailto:?subject=${subjectLine}&body=${body}`;
+  };
   return (
     <div className="step-canvas share-layout">
-      <section className="editor-card approval-card"><span className="approval-icon"><ShieldCheck/></span><span className="section-kicker">Version 1 · Prête à produire</span><h2>Votre rapport Ocliq est prêt</h2><p>Une dernière vérification, puis téléchargez une copie PDF professionnelle et immuable du rapport.</p><div className="approval-list">{checks.map((item) => <label key={item}><input type="checkbox" defaultChecked/><span><Check size={13}/></span>{item}</label>)}</div><div className="approval-actions"><button className="secondary-action" onClick={onPreview}><Eye size={16}/> Revoir la présentation</button><button className="primary-action pdf-download-action" onClick={onDownload} disabled={pdfGenerating}>{pdfGenerating ? <LoaderCircle className="pdf-spinner" size={17}/> : <Download size={17}/>} {pdfGenerating ? "Création du PDF…" : "Télécharger le PDF"}</button></div></section>
+      <section className="editor-card approval-card"><span className="approval-icon"><ShieldCheck/></span><span className="section-kicker">Version 1 · Prête à produire</span><h2>Votre rapport Ocliq est prêt</h2><p>Une dernière vérification, puis téléchargez ou partagez une copie PDF professionnelle.</p><div className="approval-list">{checks.map((item) => <label key={item.label}><input type="checkbox" checked={item.done} onChange={() => setChecks((items) => items.map((entry) => entry.label === item.label ? { ...entry, done: !entry.done } : entry))}/><span><Check size={13}/></span>{item.label}</label>)}</div><div className="approval-actions"><button className="secondary-action" onClick={onPreview}><Eye size={16}/> Revoir la présentation</button><button type="button" className="secondary-action" onClick={() => void copySummary()}>{copied ? <Check size={16}/> : <Copy size={16}/>} {copied ? "Copié" : "Copier le résumé"}</button><button type="button" className="secondary-action" onClick={emailClient}><Mail size={16}/> Envoyer par courriel</button><button className="primary-action pdf-download-action" onClick={onDownload} disabled={pdfGenerating}>{pdfGenerating ? <LoaderCircle className="pdf-spinner" size={17}/> : <Download size={17}/>} {pdfGenerating ? "Création du PDF…" : "Télécharger le PDF"}</button></div></section>
       <aside className="share-summary"><span>À la finalisation</span><div><Files/><p><strong>PDF professionnel</strong>Généré avec les données actuelles</p></div><div><Database/><p><strong>Dossier sauvegardé</strong>Reprenez-le depuis le tableau de bord</p></div><div><CheckCircle2/><p><strong>Statut prêt</strong>Visible dans votre liste d’analyses</p></div><small>Cette ACM constitue une opinion de valeur et non une évaluation agréée.</small></aside>
     </div>
   );
 }
 
-function StepContent({ step, comparables, subject, onSubjectChange, onPreview, onDownload, pdfGenerating }: { step: number; comparables: Comparable[]; subject: SubjectProperty; onSubjectChange: (subject: SubjectProperty) => void; onPreview: () => void; onDownload: () => void; pdfGenerating: boolean }) {
+function StepContent({ step, comparables, subject, onSubjectChange, onPreview, onDownload, pdfGenerating, onNotify }: { step: number; comparables: Comparable[]; subject: SubjectProperty; onSubjectChange: (subject: SubjectProperty) => void; onPreview: () => void; onDownload: () => void; pdfGenerating: boolean; onNotify: (message: string) => void }) {
   if (step === 0) return <DossierStep subject={subject} onChange={onSubjectChange}/>;
   if (step === 2) return <AdjustmentsStep comparables={comparables} />;
   if (step === 3) return <StrategyStep />;
   if (step === 4) return <PresentationStep onPreview={onPreview}/>;
-  return <ShareStep onPreview={onPreview} onDownload={onDownload} pdfGenerating={pdfGenerating} />;
+  return <ShareStep subject={subject} onPreview={onPreview} onDownload={onDownload} pdfGenerating={pdfGenerating} onNotify={onNotify} />;
 }
 
 const moneyInput = (cents?: number) => cents ? String(Math.round(cents / 100)) : "";
@@ -822,19 +860,166 @@ function DashboardPage({ reports, loading, query, onQuery, onCreate, onOpen, onA
   </section>;
 }
 
+function initialsFrom(name: string, email: string) {
+  const source = name.trim() || email.split("@")[0] || "GA";
+  return source.split(/[\s._-]+/).filter(Boolean).map((part) => part[0]?.toUpperCase() ?? "").slice(0, 2).join("") || "GA";
+}
+
 function TemplatesPage({ notify }: { notify: (message: string) => void }) {
   const [active, setActive] = useState("Ocliq Signature");
   const choose = (name: string) => { setActive(name); notify(`${name} est maintenant votre modèle actif`); };
-  return <section className="module-page"><header><span className="section-kicker">BIBLIOTHÈQUE</span><h1>Modèles de rapport</h1><p>Des récits professionnels, pensés pour différents contextes de mise en marché.</p></header><div className="template-grid"><article className={`template-card ${active === "Ocliq Signature" ? "selected" : ""}`}><div className="template-cover"><img src="/ocliq-logo.png" alt=""/><span>ANALYSE COMPARATIVE</span><strong>La valeur expliquée<br/>avec clarté.</strong></div><div><span>Ocliq Signature</span>{active === "Ocliq Signature" ? <b><Check/> Modèle actif</b> : <button onClick={() => choose("Ocliq Signature")}>Utiliser</button>}</div></article><article className={`template-card ${active === "Éditorial" ? "selected" : ""}`}><div className="template-cover light"><span>PRÉSENTATION VENDEUR</span><strong>Décider avec<br/>confiance.</strong></div><div><span>Éditorial</span>{active === "Éditorial" ? <b><Check/> Modèle actif</b> : <button onClick={() => choose("Éditorial")}>Utiliser</button>}</div></article><article className={`template-card ${active === "Express" ? "selected" : ""}`}><div className="template-cover compact"><span>AVIS DE VALEUR</span><strong>L’essentiel,<br/>en bref.</strong></div><div><span>Express</span>{active === "Express" ? <b><Check/> Modèle actif</b> : <button onClick={() => choose("Express")}>Utiliser</button>}</div></article></div></section>;
+  const templates = [
+    { name: "Ocliq Signature", kicker: "ANALYSE COMPARATIVE", title: "La valeur expliquée<br/>avec clarté.", tone: "" },
+    { name: "Éditorial", kicker: "PRÉSENTATION VENDEUR", title: "Décider avec<br/>confiance.", tone: "light" },
+    { name: "Express", kicker: "AVIS DE VALEUR", title: "L’essentiel,<br/>en bref.", tone: "compact" },
+  ];
+  return (
+    <section className="module-page">
+      <header><span className="section-kicker">BIBLIOTHÈQUE</span><h1>Modèles de rapport</h1><p>Des récits professionnels, pensés pour différents contextes de mise en marché.</p></header>
+      <div className="template-grid">
+        {templates.map((template) => (
+          <article key={template.name} className={`template-card ${active === template.name ? "selected" : ""}`}>
+            <button type="button" className={`template-cover ${template.tone}`} onClick={() => choose(template.name)}>
+              {template.tone === "" && <img src="/ocliq-logo.png" alt=""/>}
+              <span>{template.kicker}</span>
+              <strong dangerouslySetInnerHTML={{ __html: template.title }} />
+            </button>
+            <div>
+              <span>{template.name}</span>
+              {active === template.name ? <b><Check/> Modèle actif</b> : <button type="button" onClick={() => choose(template.name)}>Utiliser</button>}
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
 }
 
-function SettingsPage({ userEmail, notify }: { userEmail: string; notify: (message: string) => void }) {
-  const [profile, setProfile] = useState<BrokerProfile>({ full_name: "", brokerage_name: "", phone: "", email: userEmail });
+function SettingsPage({
+  userEmail,
+  notify,
+  profile,
+  onProfileChange,
+  section,
+  onSection,
+  demoMode,
+}: {
+  userEmail: string;
+  notify: (message: string) => void;
+  profile: BrokerProfile;
+  onProfileChange: (profile: BrokerProfile) => void;
+  section: "profile" | "branding" | "security";
+  onSection: (section: "profile" | "branding" | "security") => void;
+  demoMode?: boolean;
+}) {
   const [saving, setSaving] = useState(false);
-  useEffect(() => { loadProfile().then(setProfile).catch(() => undefined); }, []);
-  const update = (key: keyof BrokerProfile, value: string) => setProfile((current) => ({ ...current, [key]: value }));
-  const submit = async (event: FormEvent) => { event.preventDefault(); setSaving(true); try { await saveProfile(profile); notify("Profil professionnel enregistré"); } catch { notify("Impossible d’enregistrer le profil"); } finally { setSaving(false); } };
-  return <section className="settings-page"><header className="settings-hero"><div><span className="section-kicker">VOTRE ESPACE</span><h1>Paramètres</h1><p>Personnalisez votre identité professionnelle, vos rapports et la sécurité du compte.</p></div><span className="settings-avatar">{profile.full_name ? profile.full_name.split(" ").map((part) => part[0]).slice(0,2).join("") : "GA"}</span></header><div className="settings-layout"><nav className="settings-nav"><a href="#profile" className="active"><UserRound/> Profil professionnel</a><a href="#branding"><Palette/> Identité des rapports</a><a href="#security"><ShieldCheck/> Compte et sécurité</a></nav><form className="settings-content" onSubmit={submit}><section id="profile" className="settings-card"><div className="settings-card-title"><span><UserRound/></span><div><h2>Profil professionnel</h2><p>Ces renseignements apparaissent dans vos rapports et présentations.</p></div></div><div className="settings-fields"><label><span>Nom complet</span><input value={profile.full_name} onChange={(e) => update("full_name", e.target.value)} placeholder="Gabriel Arseneault"/></label><label><span>Adresse courriel</span><input value={profile.email} readOnly/></label><label><span>Agence ou bannière</span><input value={profile.brokerage_name} onChange={(e) => update("brokerage_name", e.target.value)} placeholder="Nom de l’agence"/></label><label><span>Téléphone</span><input value={profile.phone} onChange={(e) => update("phone", e.target.value)} placeholder="(819) 555-0182"/></label></div><button className="primary-action settings-save" disabled={saving}>{saving ? <LoaderCircle className="pdf-spinner"/> : <Save/>}{saving ? "Enregistrement…" : "Enregistrer le profil"}</button></section><section id="branding" className="settings-card"><div className="settings-card-title"><span><Palette/></span><div><h2>Identité des rapports</h2><p>Le thème Ocliq est appliqué automatiquement à chaque ACM.</p></div></div><div className="brand-setting"><div className="brand-preview"><img src="/ocliq-logo.png" alt="Ocliq"/></div><div><strong>Ocliq Signature</strong><small>Bleu profond · Typographie claire · Logo complet</small></div><span className="active-setting"><Check/> Actif</span></div></section><section id="security" className="settings-card"><div className="settings-card-title"><span><ShieldCheck/></span><div><h2>Compte et sécurité</h2><p>Session sécurisée par Supabase avec isolation des données.</p></div></div><div className="security-row"><div><strong>{userEmail}</strong><small>Compte actuellement connecté</small></div><button type="button" className="danger-action" onClick={() => void signOut()}><LogOut/> Se déconnecter</button></div></section></form></div></section>;
+  const update = (key: keyof BrokerProfile, value: string) => onProfileChange({ ...profile, [key]: value });
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setSaving(true);
+    try {
+      if (!demoMode) await saveProfile(profile);
+      notify("Profil professionnel enregistré");
+    } catch {
+      notify("Impossible d’enregistrer le profil");
+    } finally {
+      setSaving(false);
+    }
+  };
+  const go = (next: "profile" | "branding" | "security") => {
+    onSection(next);
+    window.requestAnimationFrame(() => document.getElementById(next)?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  };
+  return (
+    <section className="settings-page">
+      <header className="settings-hero">
+        <div><span className="section-kicker">VOTRE ESPACE</span><h1>Paramètres</h1><p>Personnalisez votre identité professionnelle, vos rapports et la sécurité du compte.</p></div>
+        <span className="settings-avatar">{initialsFrom(profile.full_name, userEmail)}</span>
+      </header>
+      <div className="settings-layout">
+        <nav className="settings-nav">
+          <button type="button" className={section === "profile" ? "active" : ""} onClick={() => go("profile")}><UserRound/> Profil professionnel</button>
+          <button type="button" className={section === "branding" ? "active" : ""} onClick={() => go("branding")}><Palette/> Identité des rapports</button>
+          <button type="button" className={section === "security" ? "active" : ""} onClick={() => go("security")}><ShieldCheck/> Compte et sécurité</button>
+        </nav>
+        <form className="settings-content" onSubmit={submit}>
+          <section id="profile" className="settings-card">
+            <div className="settings-card-title"><span><UserRound/></span><div><h2>Profil professionnel</h2><p>Ces renseignements apparaissent dans vos rapports et présentations.</p></div></div>
+            <div className="settings-fields">
+              <label><span>Nom complet</span><input value={profile.full_name} onChange={(e) => update("full_name", e.target.value)} placeholder="Gabriel Arseneault"/></label>
+              <label><span>Adresse courriel</span><input value={profile.email || userEmail} readOnly/></label>
+              <label><span>Agence ou bannière</span><input value={profile.brokerage_name} onChange={(e) => update("brokerage_name", e.target.value)} placeholder="Nom de l’agence"/></label>
+              <label><span>Téléphone</span><input value={profile.phone} onChange={(e) => update("phone", e.target.value)} placeholder="(819) 555-0182"/></label>
+            </div>
+            <button className="primary-action settings-save" disabled={saving}>{saving ? <LoaderCircle className="pdf-spinner"/> : <Save/>}{saving ? "Enregistrement…" : "Enregistrer le profil"}</button>
+          </section>
+          <section id="branding" className="settings-card">
+            <div className="settings-card-title"><span><Palette/></span><div><h2>Identité des rapports</h2><p>Le thème Ocliq est appliqué automatiquement à chaque ACM.</p></div></div>
+            <div className="brand-setting"><div className="brand-preview"><img src="/ocliq-logo.png" alt="Ocliq"/></div><div><strong>Ocliq Signature</strong><small>Bleu profond · Typographie claire · Logo complet</small></div><span className="active-setting"><Check/> Actif</span></div>
+          </section>
+          <section id="security" className="settings-card">
+            <div className="settings-card-title"><span><ShieldCheck/></span><div><h2>Compte et sécurité</h2><p>Gérez la session de ce courtier et quittez l’espace sécurisé.</p></div></div>
+            <div className="security-row">
+              <div><strong>{profile.email || userEmail || "Session locale"}</strong><small>{profile.full_name ? `${profile.full_name} · compte connecté` : "Compte actuellement connecté"}</small></div>
+              <button type="button" className="danger-action" onClick={() => void signOut()}><LogOut/> Se déconnecter</button>
+            </div>
+          </section>
+        </form>
+      </div>
+    </section>
+  );
+}
+
+type SettingsSection = "profile" | "branding" | "security";
+
+function ChromeMenu({ children, onClose, className }: { children: ReactNode; onClose: () => void; className?: string }) {
+  return (
+    <>
+      <button type="button" className="chrome-scrim" onClick={onClose} aria-label="Fermer le menu"/>
+      <div className={`chrome-menu ${className ?? ""}`} role="menu">{children}</div>
+    </>
+  );
+}
+
+function HelpPanel({ onClose, onOpenSettings }: { onClose: () => void; onOpenSettings: () => void }) {
+  return (
+    <div className="overlay help-overlay">
+      <button type="button" className="help-overlay-scrim" onClick={onClose} aria-label="Fermer l’aide"/>
+      <section className="help-panel" role="dialog" aria-labelledby="help-title">
+        <header>
+          <div><span className="section-kicker">ASSISTANCE</span><h2 id="help-title">Centre d’aide Ocliq</h2></div>
+          <button type="button" className="icon-button" onClick={onClose} aria-label="Fermer"><X size={18}/></button>
+        </header>
+        <div className="help-grid">
+          <article>
+            <CircleHelp size={18}/>
+            <div>
+              <strong>Créer une ACM</strong>
+              <p>Utilisez « Créer une ACM », complétez le dossier sujet, retenez au moins un comparable, puis générez le PDF.</p>
+            </div>
+          </article>
+          <article>
+            <Keyboard size={18}/>
+            <div>
+              <strong>Raccourcis</strong>
+              <p><kbd>⌘ K</kbd> recherche globale · <kbd>Esc</kbd> ferme les panneaux, menus et aperçus.</p>
+            </div>
+          </article>
+          <article>
+            <UserRound size={18}/>
+            <div>
+              <strong>Profil et déconnexion</strong>
+              <p>Cliquez votre avatar ou la tuile en bas de la barre latérale pour ouvrir le profil, les paramètres ou quitter la session.</p>
+            </div>
+          </article>
+        </div>
+        <footer className="help-actions">
+          <a className="secondary-action" href="mailto:assistance@ocliq.ca"><Mail size={16}/> assistance@ocliq.ca</a>
+          <button type="button" className="primary-action" onClick={onOpenSettings}><Settings size={16}/> Ouvrir les paramètres</button>
+        </footer>
+      </section>
+    </div>
+  );
 }
 
 export default function StudioApp({ userEmail, demoMode = false }: { userEmail: string; demoMode?: boolean }) {
@@ -861,6 +1046,12 @@ export default function StudioApp({ userEmail, demoMode = false }: { userEmail: 
   const [reportId, setReportId] = useState<string | null>(null);
   const [databaseReady, setDatabaseReady] = useState(false);
   const [saveState, setSaveState] = useState<"loading" | "saved" | "saving" | "error">("loading");
+  const [brokerProfile, setBrokerProfile] = useState<BrokerProfile>({ full_name: demoMode ? tenant.name : "", brokerage_name: demoMode ? tenant.descriptor : "", phone: "", email: userEmail });
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>("profile");
+  const [accountMenu, setAccountMenu] = useState<"sidebar" | "top" | null>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [unreadNotifications, setUnreadNotifications] = useState(true);
   const globalSearchRef = useRef<HTMLInputElement>(null);
   const previewSignature = useRef("");
 
@@ -868,6 +1059,7 @@ export default function StudioApp({ userEmail, demoMode = false }: { userEmail: 
     if (demoMode) { setWorkspaceLoading(false); setSaveState("saved"); return; }
     let current = true;
     listReports().then((items) => { if (current) setReports(items); }).catch(() => { if (current) setSaveState("error"); }).finally(() => { if (current) setWorkspaceLoading(false); });
+    loadProfile().then((profile) => { if (current) setBrokerProfile(profile); }).catch(() => undefined);
     return () => { current = false; };
   }, [demoMode]);
 
@@ -904,21 +1096,24 @@ export default function StudioApp({ userEmail, demoMode = false }: { userEmail: 
         globalSearchRef.current?.select();
       }
       if (event.key === "Escape") {
-        if (previewOpen) setPreviewOpen(false);
+        if (accountMenu) setAccountMenu(null);
+        else if (notificationsOpen) setNotificationsOpen(false);
+        else if (helpOpen) setHelpOpen(false);
+        else if (previewOpen) setPreviewOpen(false);
         else if (drawerOpen) setDrawerOpen(false);
         else if (mobileOpen) setMobileOpen(false);
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [drawerOpen, mobileOpen, previewOpen]);
+  }, [accountMenu, notificationsOpen, helpOpen, drawerOpen, mobileOpen, previewOpen]);
 
   useEffect(() => {
-    if (!drawerOpen && !previewOpen) return;
+    if (!drawerOpen && !previewOpen && !helpOpen) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => { document.body.style.overflow = previousOverflow; };
-  }, [drawerOpen, previewOpen]);
+  }, [drawerOpen, previewOpen, helpOpen]);
 
   const filtered = useMemo(() => comparables.filter((item) => {
     const statusMatch = filter === "Toutes" || item.status === filter;
@@ -1122,6 +1317,38 @@ export default function StudioApp({ userEmail, demoMode = false }: { userEmail: 
     }
   };
 
+  const displayName = brokerProfile.full_name.trim() || userEmail.split("@")[0] || tenant.name;
+  const displayInitials = initialsFrom(brokerProfile.full_name, userEmail);
+  const displayRole = brokerProfile.brokerage_name.trim() || tenant.descriptor;
+  const closeChrome = () => {
+    setAccountMenu(null);
+    setNotificationsOpen(false);
+    setHelpOpen(false);
+  };
+  const openSettings = (section: SettingsSection = "profile") => {
+    setSettingsSection(section);
+    setActiveNav(2);
+    setMobileOpen(false);
+    closeChrome();
+  };
+  const toggleAccountMenu = (anchor: "sidebar" | "top") => {
+    setNotificationsOpen(false);
+    setHelpOpen(false);
+    setAccountMenu((current) => current === anchor ? null : anchor);
+  };
+  const accountMenuItems = (
+    <>
+      <div className="chrome-menu-head">
+        <span className="tenant-avatar">{displayInitials}</span>
+        <span><strong>{displayName}</strong><small>{userEmail || displayRole}</small></span>
+      </div>
+      <button type="button" role="menuitem" onClick={() => openSettings("profile")}><UserRound size={16}/> Profil professionnel</button>
+      <button type="button" role="menuitem" onClick={() => openSettings("branding")}><Palette size={16}/> Identité des rapports</button>
+      <button type="button" role="menuitem" onClick={() => openSettings("security")}><ShieldCheck size={16}/> Compte et sécurité</button>
+      <button type="button" role="menuitem" className="chrome-menu-danger" onClick={() => void signOut()}><LogOut size={16}/> Se déconnecter</button>
+    </>
+  );
+
   return (
     <div
       className={`studio-shell ${collapsed ? "sidebar-collapsed" : ""}`}
@@ -1132,27 +1359,58 @@ export default function StudioApp({ userEmail, demoMode = false }: { userEmail: 
         "--ocliq": tenant.theme.ocliq,
       } as React.CSSProperties}
     >
-      <aside className={`sidebar ${mobileOpen ? "mobile-open" : ""}`}>
+      <aside className={`sidebar ${mobileOpen ? "mobile-open" : ""} ${accountMenu === "sidebar" ? "chrome-open" : ""}`}>
         <div className="brand-lockup">
           <div className="brand-identity"><img src="/ocliq-logo.png" alt="Ocliq"/><span>{frCA.brand.product}</span></div>
           <span className="brand-symbol" aria-hidden="true"><img src="/ocliq-logo.png" alt=""/></span>
           <button className="collapse-button" onClick={() => setCollapsed(!collapsed)} aria-label={collapsed ? "Agrandir la navigation" : "Réduire la navigation"}><ChevronsLeft size={17}/></button>
           <button className="mobile-sidebar-close" onClick={() => setMobileOpen(false)} aria-label="Fermer la navigation"><X size={19}/></button>
         </div>
-        <button className="tenant-switcher" onClick={() => { setActiveNav(2); setMobileOpen(false); }}><span className="tenant-avatar">{tenant.initials}</span><span className="tenant-copy"><strong>{tenant.name}</strong><small>{tenant.descriptor}</small></span><ChevronRight size={15}/></button>
+        <button className="tenant-switcher" onClick={() => openSettings("branding")}><span className="tenant-avatar">{displayInitials}</span><span className="tenant-copy"><strong>{displayName}</strong><small>{displayRole}</small></span><ChevronRight size={15}/></button>
         <button className="quick-create" onClick={() => { setMobileOpen(false); void startNewReport(); }} disabled={workspaceLoading}><Plus size={18}/><span>Créer une ACM</span></button>
-        <nav>{frCA.nav.map((item, index) => { const Icon = navIcons[index]; return <button key={item} className={activeNav === index ? "active" : ""} onClick={() => { setActiveNav(index); if (index === 0) setScreen("dashboard"); setMobileOpen(false); }}><Icon size={18}/><span>{item}</span></button>; })}</nav>
-        <div className="sidebar-bottom"><button onClick={() => flash("Centre d’aide Ocliq · assistance@ocliq.ca")}><CircleHelp size={18}/><span>Centre d’aide</span></button><div className="user-tile"><span className="tenant-avatar muted">GA</span><span><strong>Gabriel A.</strong><small>Courtier</small></span><MoreHorizontal size={17}/></div></div>
+        <nav>{frCA.nav.map((item, index) => { const Icon = navIcons[index]; return <button key={item} className={activeNav === index ? "active" : ""} onClick={() => { setActiveNav(index); if (index === 0) setScreen("dashboard"); if (index === 2) setSettingsSection("profile"); setMobileOpen(false); closeChrome(); }}><Icon size={18}/><span>{item}</span></button>; })}</nav>
+        <div className="sidebar-bottom">
+          <button type="button" onClick={() => { setHelpOpen(true); setAccountMenu(null); setNotificationsOpen(false); setMobileOpen(false); }}><CircleHelp size={18}/><span>Centre d’aide</span></button>
+          <div className="account-anchor">
+            <button type="button" className="user-tile" onClick={() => toggleAccountMenu("sidebar")} aria-haspopup="menu" aria-expanded={accountMenu === "sidebar"}>
+              <span className="tenant-avatar muted">{displayInitials}</span>
+              <span><strong>{displayName}</strong><small>{displayRole}</small></span>
+              <MoreHorizontal size={17}/>
+            </button>
+            {accountMenu === "sidebar" && <ChromeMenu className="chrome-menu-up" onClose={() => setAccountMenu(null)}>{accountMenuItems}</ChromeMenu>}
+          </div>
+        </div>
       </aside>
 
       {mobileOpen && <button className="mobile-scrim" onClick={() => setMobileOpen(false)} aria-label="Fermer le menu"/>}
 
       <div className="app-column">
-        <header className="topbar">
+        <header className={`topbar ${accountMenu === "top" || notificationsOpen ? "chrome-open" : ""}`}>
           <button className="mobile-menu" onClick={() => setMobileOpen(true)} aria-label="Ouvrir le menu"><Menu size={21}/></button>
           <div className="breadcrumbs"><button onClick={() => void returnToDashboard()}>Analyses</button>{activeNav === 0 && screen === "editor" && <><ChevronRight size={13}/><strong>{subject.address || "Nouvelle ACM"}</strong></>}</div>
           <label className="global-search"><Search size={17}/><input ref={globalSearchRef} value={dashboardQuery} onChange={(event) => { setDashboardQuery(event.target.value); setActiveNav(0); setScreen("dashboard"); }} placeholder={frCA.common.search}/><kbd>⌘ K</kbd></label>
-          <div className="top-actions">{(demoMode || process.env.NODE_ENV !== "production") && <button type="button" className="secondary-action test-fill-button" onClick={() => void fillDummyData()} disabled={workspaceLoading} title="Remplit le dossier et les comparables pour un test PDF de bout en bout"><Sparkles size={15}/> Remplir données test</button>}<span className={`saved-status save-${saveState}`}>{saveState === "saving" ? <LoaderCircle className="pdf-spinner" size={14}/> : saveState === "error" ? <Database size={14}/> : <Check size={14}/>} {saveState === "loading" ? "Connexion…" : saveState === "saving" ? "Sauvegarde…" : saveState === "error" ? "Supabase à configurer" : "Sauvegardé"}</span><span className="demo-pill"><span/> En ligne</span><button className="icon-button has-dot" aria-label="Notifications" onClick={() => flash("Aucune nouvelle notification")}><Bell size={19}/></button><button className="avatar-button" onClick={() => void signOut()} title={`Déconnecter ${userEmail}`} aria-label="Se déconnecter">GA</button></div>
+          <div className="top-actions">
+            {(demoMode || process.env.NODE_ENV !== "production") && <button type="button" className="secondary-action test-fill-button" onClick={() => void fillDummyData()} disabled={workspaceLoading} title="Remplit le dossier et les comparables pour un test PDF de bout en bout"><Sparkles size={15}/> Remplir données test</button>}
+            <span className={`saved-status save-${saveState}`}>{saveState === "saving" ? <LoaderCircle className="pdf-spinner" size={14}/> : saveState === "error" ? <Database size={14}/> : <Check size={14}/>} {saveState === "loading" ? "Connexion…" : saveState === "saving" ? "Sauvegarde…" : saveState === "error" ? "Supabase à configurer" : "Sauvegardé"}</span>
+            <span className="demo-pill"><span/> En ligne</span>
+            <div className="account-anchor">
+              <button type="button" className={`icon-button ${unreadNotifications ? "has-dot" : ""}`} aria-label="Notifications" aria-expanded={notificationsOpen} onClick={() => { setNotificationsOpen((open) => !open); setUnreadNotifications(false); setAccountMenu(null); setHelpOpen(false); }}>
+                <Bell size={19}/>
+              </button>
+              {notificationsOpen && (
+                <ChromeMenu className="chrome-menu-down chrome-menu-wide" onClose={() => setNotificationsOpen(false)}>
+                  <div className="chrome-menu-head"><Bell size={16}/><span><strong>Notifications</strong><small>Activité de votre espace courtier</small></span></div>
+                  <div className="notification-item"><CheckCircle2 size={16}/><span><strong>Espace prêt</strong><small>Vos analyses et votre profil sont accessibles depuis cette barre.</small></span></div>
+                  <div className="notification-item"><ShieldCheck size={16}/><span><strong>{saveState === "error" ? "Sauvegarde à configurer" : "Session active"}</strong><small>{saveState === "error" ? "Vérifiez la connexion Supabase dans les paramètres." : "Les modifications sont enregistrées automatiquement."}</small></span></div>
+                  <button type="button" role="menuitem" onClick={() => { setNotificationsOpen(false); flash("Toutes les notifications ont été lues"); }}>Tout marquer comme lu</button>
+                </ChromeMenu>
+              )}
+            </div>
+            <div className="account-anchor">
+              <button type="button" className="avatar-button" onClick={() => toggleAccountMenu("top")} title={displayName} aria-label="Menu du compte" aria-haspopup="menu" aria-expanded={accountMenu === "top"}>{displayInitials}</button>
+              {accountMenu === "top" && <ChromeMenu className="chrome-menu-down" onClose={() => setAccountMenu(null)}>{accountMenuItems}</ChromeMenu>}
+            </div>
+          </div>
         </header>
 
         <main>
@@ -1184,19 +1442,20 @@ export default function StudioApp({ userEmail, demoMode = false }: { userEmail: 
                   </section>
                   <InsightPanel comparables={comparables} onContinue={() => handleStep(2)}/>
                 </div>
-              ) : <StepContent step={activeStep} comparables={comparables} subject={subject} onSubjectChange={updateSubject} onPreview={() => void reviewPdf()} onDownload={() => void downloadPdf()} pdfGenerating={pdfGenerating}/>} 
+              ) : <StepContent step={activeStep} comparables={comparables} subject={subject} onSubjectChange={updateSubject} onPreview={() => void reviewPdf()} onDownload={() => void downloadPdf()} pdfGenerating={pdfGenerating} onNotify={flash}/>} 
 
               {activeStep !== 1 && (
                 <div className="step-footer"><button className="secondary-action" onClick={() => handleStep(Math.max(activeStep - 1, 0))}><ArrowLeft size={16}/>{frCA.common.back}</button><span><Check size={14}/>{frCA.analysis.updated}</span><button className="primary-action" onClick={() => activeStep < 5 ? handleStep(activeStep + 1) : void finishReview()}>{activeStep < 5 ? "Continuer" : "Finaliser et retourner au tableau de bord"}<ArrowRight size={16}/></button></div>
               )}
               </div>
             </>
-          ) : activeNav === 1 ? <TemplatesPage notify={flash}/> : <SettingsPage userEmail={userEmail} notify={flash}/>} 
+          ) : activeNav === 1 ? <TemplatesPage notify={flash}/> : <SettingsPage userEmail={userEmail} notify={flash} profile={brokerProfile} onProfileChange={setBrokerProfile} section={settingsSection} onSection={setSettingsSection} demoMode={demoMode}/>} 
         </main>
       </div>
 
       {drawerOpen && <ComparableDrawer comparable={comparables.find((item) => item.id === editingComparableId)} onClose={() => setDrawerOpen(false)} onSave={(item, continueWorkflow) => { setComparables((items) => items.some((existing) => existing.id === item.id) ? items.map((existing) => existing.id === item.id ? item : existing) : [item, ...items]); setDrawerOpen(false); if (continueWorkflow) handleStep(2); flash(continueWorkflow ? "Comparable enregistré - poursuivez avec les ajustements" : editingComparableId ? "Fiche comparable mise à jour" : "Comparable ajouté à l’analyse"); }}/>} 
       {previewOpen && <PdfPreview onClose={() => setPreviewOpen(false)} url={previewUrl} loading={pdfGenerating} onDownload={() => void downloadPdf()}/>} 
+      {helpOpen && <HelpPanel onClose={() => setHelpOpen(false)} onOpenSettings={() => openSettings("profile")}/>}
       {toast && <div className="toast"><CheckCircle2 size={18}/>{toast}</div>}
     </div>
   );

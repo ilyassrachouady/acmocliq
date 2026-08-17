@@ -151,9 +151,13 @@ export async function saveWorkspace(reportId: string, workflowStep: number, comp
 }
 
 export async function signOut() {
-  const supabase = createClient();
-  await supabase.auth.signOut();
-  window.location.reload();
+  try {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+  } catch {
+    // Demo mode and missing keys still return to the landing screen.
+  }
+  window.location.assign("/");
 }
 
 export type BrokerProfile = { full_name: string; brokerage_name: string; phone: string; email: string };
