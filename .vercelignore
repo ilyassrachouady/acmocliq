@@ -1,0 +1,6 @@
+primalis-theme
+output
+dist
+.wrangler
+node_modules
+.git
