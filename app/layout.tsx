@@ -7,8 +7,10 @@ const geist = Geist({
   subsets: ["latin"],
 });
 
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim() || "https://acmocliq.vercel.app";
+
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://acm-studio.ocliq.app"),
+  metadataBase: new URL(siteUrl),
   title: "ACM Studio par Ocliq",
   description: "L’espace de travail des courtiers québécois pour créer, présenter et convertir une analyse comparative du marché.",
   openGraph: {

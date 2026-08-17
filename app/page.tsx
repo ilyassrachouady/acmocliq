@@ -7,6 +7,9 @@ export const dynamic = "force-dynamic";
 export default async function Home({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
   const params = await searchParams;
   if (process.env.NODE_ENV !== "production" && params?.demo === "1") return <StudioApp userEmail="demo@ocliq.ca" demoMode/>;
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim();
+  if (!supabaseUrl || !supabaseKey) return <AuthScreen/>;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   return user ? <StudioApp userEmail={user.email ?? ""}/> : <AuthScreen/>;
